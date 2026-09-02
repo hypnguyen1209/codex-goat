@@ -4,6 +4,50 @@ All notable changes to codex-goat are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-09-03
+
+Four defects found by reading five comparable projects (oh-my-codex, ECC, codegraph,
+claude-mem, ponytail) and then auditing this repo against them. All four were confirmed by
+running the shipped binary, and each now has a regression test.
+
+### Fixed
+
+- **The evidence gate accepted failing commands.** `EvidenceRef.exitCode` was stored,
+  written to the ledger, and printed — and never compared to zero, so
+  `goat ledger evidence --exit 1 -- npm test` satisfied the gate and `goat status` exited
+  0. `isSubstantiveEvidence` now requires exit 0, a non-empty command, and rejects shell
+  no-ops (`true`, `:`, `echo`, …). `goat status` reports which of the three failed. The
+  no-op list is a lint against lazy proof, not a security control.
+- **`goat state set` silently erased the artifact.** `flagString` returned `null` for an
+  absent flag and `updateStage` reads `null` as "clear this field", so
+  `goat state set --stage plan --status complete` with no `--artifact` wiped the path a
+  previous call recorded. Absent flags are now `undefined`; `--artifact=` still clears
+  deliberately.
+- **The hook violated its own documented purity rule.** `detectStage` matched a bare
+  leading word, so ordinary prose ("plan the migration") was treated as a stage invocation
+  and paid for a contract report including its `git status` probe. An explicit `$` or `/`
+  sigil is now required, and the documented invariant states the one bounded git call
+  instead of claiming there is no subprocess.
+- **`compress()` stripped at most three filler phrases.** The pass loop broke on the first
+  hit and capped at three rounds, so a sentence with ten filler phrases kept seven. Every
+  occurrence is now removed, earliest-match-first, with a bound proportional to input
+  length. Both the TypeScript and Rust implementations changed together; the shared
+  fixture proves they still agree.
+
+### Changed
+
+- `RequirementVerdict` narrowed to `satisfied | inline`. The `"missing"` case nothing
+  produced made the readiness filter a tautology and hid the never-hard-block rule behind
+  an unreachable branch. `ContractReport.ready` is now typed `true`.
+- The native `SessionStart` path uses the same evidence predicate as `goat status`, so a
+  resumed session and the CLI cannot disagree about which claims are proven.
+- Three new bundle checks, each verified to fail when the invariant is broken: no dead
+  requirement verdict, the evidence gate inspects the exit code inside its own body, and
+  the no-op command lists match across the Node and native paths.
+- CI now asserts all three evidence-gate holes fail the status gate, and that a later
+  `state set` preserves the artifact. It previously recorded `-- true` as evidence and
+  asserted that it passed.
+
 ## [0.1.0] — 2026-09-03
 
 First release.
@@ -55,4 +99,5 @@ First release.
   optional Bun single-file build.
 - 66 unit tests, 74 bundle contract checks, 17 Rust tests.
 
+[0.1.1]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.0

@@ -95,7 +95,7 @@ working tree, or by the user simply saying it in the invocation.
 Ask the tool where you stand at any moment:
 
 ```bash
-goat contract              # every stage: ready, or exactly what is missing
+goat contract              # every stage: what is already satisfied, what to state inline
 goat contract ultragoal    # one stage
 ```
 
@@ -106,7 +106,8 @@ $ultragoal: ready
 ```
 
 `inline` means *the user's own message can satisfy this* — so the stage proceeds. Nothing
-is ever hard-blocked; that property is enforced by a test.
+is ever hard-blocked, and that is enforced by the type: `RequirementVerdict` is
+`satisfied | inline`, with no third case, and a bundle check fails if the union grows.
 
 ## Evidence: what makes "done" mean something
 
@@ -116,16 +117,18 @@ Every stage records proof in an append-only ledger:
 goat ledger evidence --stage ultragoal --exit 0 -- npm test
 ```
 
-`goat status` then reconciles claims against proof, and marks any stage completed with no
-recorded evidence as `complete*`:
+`goat status` then reconciles claims against proof and marks anything that does not hold
+up as `complete*`. Three things fail the check: no evidence at all, a command that exited
+non-zero, and a shell no-op like `true` that exits 0 without testing anything.
 
 ```text
 $plan          complete   ready
      artifact: .goat/plans/checkout.md
      last evidence: npm test -> exit 0
 $ultragoal     complete*  ready
+     unproven: every recorded command failed (last: npm test -> exit 1)
 
-goat warn 1 stage(s) marked complete with no recorded evidence (shown as complete*).
+goat warn 1 stage(s) marked complete without evidence that backs the claim (shown as complete*).
 ```
 
 `goat status` exits non-zero when that happens, so CI can gate on it. This is the single
@@ -193,7 +196,9 @@ Three properties hold for every hook, and are covered by tests in both implement
 
 1. **Never blocks.** No hook can return a block decision.
 2. **Never throws.** Malformed input exits 0 with `{}`.
-3. **Never phones home.** Reads small local files only.
+3. **Never phones home, and stays cheap.** Local file reads, plus at most one
+   `git status --porcelain` (5s timeout) — and only when a prompt explicitly invokes a
+   stage whose contract depends on the working tree. Ordinary prompts run no subprocess.
 
 **Session memory** is a local, append-only log under `.goat/memory/`. Prose is compressed;
 code spans, paths, URLs, filenames, and version numbers are preserved byte-for-byte.
@@ -246,8 +251,8 @@ npm run build            # TypeScript -> dist/
 npm run build:native     # optional Rust helper
 npm run build:bun        # optional single-file binary (bun build --compile)
 
-npm test                 # build + 66 unit tests + 74 bundle contract checks
-npm run test:native      # 17 Rust tests
+npm test                 # build + 81 unit tests + 77 bundle contract checks
+npm run test:native      # 18 Rust tests
 npm run verify           # lint + everything above
 ```
 

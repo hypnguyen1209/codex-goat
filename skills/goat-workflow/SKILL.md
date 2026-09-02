@@ -61,5 +61,6 @@ Whatever stage runs, the rule does not change: a claim needs a command that ran.
 goat ledger evidence --stage <stage> --exit <code> -- <command>
 ```
 
-`goat status` marks any stage completed without evidence as `complete*`. Treat that as
+`goat status` marks a stage `complete*` when its evidence does not back the claim — none
+recorded, every command exited non-zero, or every command is a shell no-op. Treat that as
 unfinished work, not as a formatting detail.

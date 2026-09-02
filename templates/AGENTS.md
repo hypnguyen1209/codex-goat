@@ -11,8 +11,11 @@ A claim needs a command that ran. "Done", "working", "fixed", and "verified" are
 - `goat ledger evidence --stage <stage> --exit <code> -- <command>`
 - If you could not run it, say so plainly and say why. An honest unverified result is
   worth more than a confident false one.
-- `goat status` marks a stage completed without evidence as `complete*`. That is
-  unfinished work.
+- `goat status` marks a stage `complete*` when its evidence does not back the claim: no
+  evidence recorded, every command exited non-zero, or every command is a shell no-op
+  (`true`, `echo`, `:`). That is unfinished work, not a formatting detail.
+- Recording `-- true` to satisfy the gate is not a shortcut, it is a false claim. If the
+  real check cannot run here, record nothing and say why.
 
 ### Stages are independent
 

@@ -17,9 +17,17 @@ A wrapper and plugin around OpenAI Codex CLI. Codex stays the execution engine.
 
 These are enforced by tests. If you change one, change the test deliberately and say why.
 
-1. **No stage is ever hard-blocked.** Every entry-contract requirement resolves to
-   `satisfied` or `inline`, never `missing`. This is what makes the five canonical skills
-   independently invocable. — `src/__tests__/contract.test.ts`
+1. **No stage is ever hard-blocked.** `RequirementVerdict` is `satisfied | inline` and
+   nothing else. A third verdict would make a stage blockable and end independent
+   invocation. — `src/__tests__/contract.test.ts`, plus a bundle check that fails if the
+   union grows. v0.1.0 declared a `"missing"` case nothing produced, which made the
+   readiness filter a tautology; the type is the enforcement, not the comment.
+
+1b. **Evidence must back the claim.** `isSubstantiveEvidence` rejects a non-zero exit
+   code, an empty command, and shell no-ops. v0.1.0 stored `exitCode` and never compared
+   it, so a failing test satisfied the gate. Both the Node and native hook paths use the
+   same predicate and their no-op lists are checked against each other. —
+   `src/__tests__/state.test.ts`, `crates/goat-runtime/tests/hook.rs`
 2. **Hooks never block, never throw, never phone home.** Malformed input exits 0 with
    `{}`. No hook response contains a `decision` field. — `src/__tests__/handler.test.ts`,
    `crates/goat-runtime/tests/hook.rs`

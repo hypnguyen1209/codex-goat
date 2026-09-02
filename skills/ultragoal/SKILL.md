@@ -81,8 +81,12 @@ goat state set --stage ultragoal --status complete --artifact .goat/goals/<slug>
 goat status
 ```
 
-`goat status` reports any stage marked complete with no evidence as `complete*`. If your
+`goat status` reports a stage as `complete*` when its evidence does not back the claim:
+none recorded, every command exited non-zero, or every command is a shell no-op. If your
 run shows `complete*`, it is not done — go record the proof or reopen the goal.
+
+Recording `-- true` to close the gate is not a shortcut, it is a false claim. If the real
+verification cannot run in this environment, record nothing and say so.
 
 ## The claim gate
 
