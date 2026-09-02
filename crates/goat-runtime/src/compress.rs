@@ -1,0 +1,240 @@
+//! Deterministic prose compression for session memory.
+//!
+//! The guarantee that matters: code spans, URLs, file paths, filenames, and version
+//! numbers are preserved byte-for-byte. Only the prose between them is shortened.
+//!
+//! This is implemented twice — here and in `src/state/memory.ts` — because both the
+//! native and the Node hook path must produce identical output. `tests/compress.rs` and
+//! `src/__tests__/compress-parity.test.ts` both read `tests/fixtures/compress.json`, so
+//! the two implementations cannot silently drift.
+
+/// Filler phrases removed from unprotected prose, matched case-insensitively.
+const FILLER: &[&str] = &[
+    "i will ",
+    "i'll ",
+    "i am going to ",
+    "i can ",
+    "i could ",
+    "i would ",
+    "let me ",
+    "let's ",
+    "i think ",
+    "i believe ",
+    "it seems that ",
+    "it looks like ",
+    "basically ",
+    "essentially ",
+    "actually ",
+    "please note that ",
+    "it is worth noting that ",
+    "as you can see ",
+    "of course ",
+    "obviously ",
+    "in order to ",
+    "the reason why ",
+];
+
+/// True when the character can appear inside a protected span (path, filename, version).
+fn is_token_char(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | '\\' | ':')
+}
+
+/// Split the input into `(protected, text)` segments in source order.
+///
+/// Protected segments are backtick spans, URLs, and any token containing `/`, `\`, or a
+/// `.` between word characters — which covers paths, filenames, and version numbers.
+fn segment(input: &str) -> Vec<(bool, String)> {
+    let chars: Vec<char> = input.chars().collect();
+    let mut segments: Vec<(bool, String)> = Vec::new();
+    let mut plain = String::new();
+    let mut index = 0;
+
+    while index < chars.len() {
+        let ch = chars[index];
+
+        if ch == '`' {
+            if let Some(end) = chars[index + 1..].iter().position(|&c| c == '`') {
+                let close = index + 1 + end;
+                if !plain.is_empty() {
+                    segments.push((false, std::mem::take(&mut plain)));
+                }
+                segments.push((true, chars[index..=close].iter().collect()));
+                index = close + 1;
+                continue;
+            }
+        }
+
+        if is_token_char(ch) {
+            let start = index;
+            while index < chars.len() && is_token_char(chars[index]) {
+                index += 1;
+            }
+            let token: String = chars[start..index].iter().collect();
+            if is_protected_token(&token) {
+                if !plain.is_empty() {
+                    segments.push((false, std::mem::take(&mut plain)));
+                }
+                segments.push((true, token));
+            } else {
+                plain.push_str(&token);
+            }
+            continue;
+        }
+
+        plain.push(ch);
+        index += 1;
+    }
+
+    if !plain.is_empty() {
+        segments.push((false, plain));
+    }
+    segments
+}
+
+fn is_protected_token(token: &str) -> bool {
+    if token.starts_with("http://") || token.starts_with("https://") {
+        return true;
+    }
+    if token.contains('/') || token.contains('\\') {
+        return true;
+    }
+    // `file.ts`, `1.2.3`, `pkg.json` — a dot with content on both sides.
+    if let Some(dot) = token.find('.') {
+        let before = &token[..dot];
+        let after = &token[dot + 1..];
+        if !before.is_empty() && !after.is_empty() && !after.starts_with('.') {
+            return true;
+        }
+    }
+    false
+}
+
+fn strip_filler(text: &str) -> String {
+    let mut out = text.to_string();
+    // Repeat until stable: removing one filler can expose another ("let me actually ...").
+    for _ in 0..3 {
+        let lower = out.to_lowercase();
+        let mut changed = false;
+        for phrase in FILLER {
+            let mut search_from = 0;
+            while let Some(found) = lower[search_from..].find(phrase) {
+                let start = search_from + found;
+                // Only strip at a word boundary.
+                let boundary = start == 0 || !lower.as_bytes()[start - 1].is_ascii_alphanumeric();
+                if boundary {
+                    out.replace_range(start..start + phrase.len(), "");
+                    changed = true;
+                    break;
+                }
+                search_from = start + phrase.len();
+                if search_from >= lower.len() {
+                    break;
+                }
+            }
+            if changed {
+                break;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    out
+}
+
+fn collapse_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut previous_space = false;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !previous_space {
+                out.push(' ');
+            }
+            previous_space = true;
+        } else {
+            out.push(ch);
+            previous_space = false;
+        }
+    }
+    out
+}
+
+pub fn compress(input: &str) -> String {
+    let joined: String = segment(input)
+        .into_iter()
+        .map(|(protected, text)| {
+            if protected {
+                text
+            } else {
+                collapse_whitespace(&strip_filler(&text))
+            }
+        })
+        .collect();
+
+    // Repair spacing left behind by removed phrases.
+    let mut out = String::with_capacity(joined.len());
+    let chars: Vec<char> = joined.chars().collect();
+    for (index, &ch) in chars.iter().enumerate() {
+        if ch == ' ' {
+            if let Some(&next) = chars.get(index + 1) {
+                if matches!(next, '.' | ',' | ';' | ':' | '!' | '?') {
+                    continue;
+                }
+            }
+        }
+        out.push(ch);
+    }
+    collapse_whitespace(&out).trim().to_string()
+}
+
+/// Remove `<private>...</private>` spans before anything is written to disk.
+pub fn redact(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let lower = input.to_lowercase();
+    let mut cursor = 0;
+    while let Some(open) = lower[cursor..].find("<private>") {
+        let start = cursor + open;
+        out.push_str(&input[cursor..start]);
+        out.push_str("[redacted]");
+        match lower[start..].find("</private>") {
+            Some(close) => cursor = start + close + "</private>".len(),
+            None => return out,
+        }
+    }
+    out.push_str(&input[cursor..]);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_code_spans_and_paths() {
+        let input = "I will basically update `useMemo` in src/app/page.tsx to fix v1.2.3";
+        let output = compress(input);
+        assert!(output.contains("`useMemo`"), "code span lost: {output}");
+        assert!(output.contains("src/app/page.tsx"), "path lost: {output}");
+        assert!(output.contains("v1.2.3"), "version lost: {output}");
+        assert!(!output.to_lowercase().contains("i will"), "filler kept: {output}");
+    }
+
+    #[test]
+    fn preserves_urls() {
+        let output = compress("Let me check https://example.com/a/b for details");
+        assert!(output.contains("https://example.com/a/b"));
+    }
+
+    #[test]
+    fn does_not_strip_filler_inside_words() {
+        // "actually" appears inside "factually", which must survive.
+        let output = compress("The claim is factually correct");
+        assert!(output.contains("factually"), "word damaged: {output}");
+    }
+
+    #[test]
+    fn redacts_private_spans() {
+        assert_eq!(redact("a <private>secret</private> b"), "a [redacted] b");
+        assert_eq!(redact("a <private>unterminated"), "a [redacted]");
+    }
+}

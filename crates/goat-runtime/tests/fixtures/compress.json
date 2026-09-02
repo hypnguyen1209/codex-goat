@@ -1,0 +1,58 @@
+[
+  {
+    "input": "I will basically update `useMemo` in src/app/page.tsx to fix v1.2.3",
+    "expected": "update `useMemo` in src/app/page.tsx to fix v1.2.3"
+  },
+  {
+    "input": "Let me check https://example.com/a/b for details",
+    "expected": "check https://example.com/a/b for details"
+  },
+  {
+    "input": "The claim is factually correct",
+    "expected": "The claim is factually correct"
+  },
+  {
+    "input": "It looks like the reason why the build fails is a missing dep",
+    "expected": "the build fails is a missing dep"
+  },
+  {
+    "input": "Actually, of course, obviously this is fine.",
+    "expected": "Actually, of course, this is fine."
+  },
+  {
+    "input": "In order to run tests, use npm run test:unit",
+    "expected": "run tests, use npm run test:unit"
+  },
+  {
+    "input": "I think I believe we should edit C:\\Users\\app\\main.rs",
+    "expected": "we should edit C:\\Users\\app\\main.rs"
+  },
+  {
+    "input": "no filler here at all",
+    "expected": "no filler here at all"
+  },
+  {
+    "input": "   ",
+    "expected": ""
+  },
+  {
+    "input": "Let me actually essentially simplify this",
+    "expected": "simplify this"
+  },
+  {
+    "input": "Edit package.json and Cargo.toml, then run cargo test",
+    "expected": "Edit package.json and Cargo.toml, then run cargo test"
+  },
+  {
+    "input": "I could not reproduce it; the reason is unclear",
+    "expected": "not reproduce it; the reason is unclear"
+  },
+  {
+    "input": "Basically   collapse    all   whitespace",
+    "expected": "collapse all whitespace"
+  },
+  {
+    "input": "Keep `code with let me inside` untouched",
+    "expected": "Keep `code with let me inside` untouched"
+  }
+]
