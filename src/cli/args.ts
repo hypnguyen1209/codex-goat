@@ -116,9 +116,17 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   return { command, flags, positionals, passthrough, raw: argv };
 }
 
-export function flagString(flags: Map<string, string | true>, name: string): string | null {
+/**
+ * Returns `undefined` — not `null` — when the flag is absent.
+ *
+ * The distinction is load-bearing: `updateStage` treats `undefined` as "leave this field
+ * alone" and `null` as "clear it". Returning `null` here meant that
+ * `goat state set --stage plan --status complete`, with no `--artifact`, silently erased
+ * the artifact path a previous call had recorded.
+ */
+export function flagString(flags: Map<string, string | true>, name: string): string | undefined {
   const value = flags.get(name);
-  return typeof value === "string" ? value : null;
+  return typeof value === "string" ? value : undefined;
 }
 
 export function flagBool(flags: Map<string, string | true>, ...names: string[]): boolean {

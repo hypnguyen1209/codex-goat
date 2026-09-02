@@ -28,13 +28,19 @@ export function runState(parsed: ParsedArgs, cwd: string = process.cwd()): numbe
       if (status !== "idle" && status !== "active" && status !== "complete" && status !== "blocked") {
         throw new GoatError(`Unknown --status '${status}'.`, "Use idle, active, complete, or blocked.");
       }
+      // Absent flags stay absent, so a later `state set` cannot wipe an artifact or
+      // summary an earlier call recorded. Passing an empty value clears deliberately.
+      const artifact = flagString(parsed.flags, "artifact");
+      const summary = flagString(parsed.flags, "summary");
       const next = updateStage(
         stage,
         {
           status,
-          artifact: flagString(parsed.flags, "artifact"),
-          summary: flagString(parsed.flags, "summary"),
-          objective: flagString(parsed.flags, "objective") ?? undefined,
+          ...(artifact === undefined ? {} : { artifact: artifact === "" ? null : artifact }),
+          ...(summary === undefined ? {} : { summary: summary === "" ? null : summary }),
+          ...(flagString(parsed.flags, "objective") === undefined
+            ? {}
+            : { objective: flagString(parsed.flags, "objective") as string }),
         },
         cwd,
       );
@@ -42,8 +48,8 @@ export function runState(parsed: ParsedArgs, cwd: string = process.cwd()): numbe
         {
           stage,
           kind: status === "complete" ? "complete" : status === "blocked" ? "blocked" : "start",
-          summary: flagString(parsed.flags, "summary") ?? `${STAGES[stage].invocation} -> ${status}`,
-          ...(flagString(parsed.flags, "artifact") ? { artifact: flagString(parsed.flags, "artifact") as string } : {}),
+          summary: summary ?? `${STAGES[stage].invocation} -> ${status}`,
+          ...(artifact ? { artifact } : {}),
         },
         cwd,
       );

@@ -72,3 +72,18 @@ test("an empty argv yields an empty parse", () => {
   assert.deepEqual(parsed.positionals, []);
   assert.deepEqual(parsed.passthrough, []);
 });
+
+// Regression: flagString returned `null` for an absent flag, and `updateStage` reads
+// `null` as "clear this field". So `goat state set --stage plan --status complete`, with
+// no --artifact, silently erased the artifact a previous call had recorded.
+test("an absent flag is undefined, not null, so callers can distinguish it from a clear", () => {
+  const parsed = parseArgs(["state", "set", "--stage", "plan", "--status", "complete"]);
+  assert.equal(flagString(parsed.flags, "artifact"), undefined);
+  assert.equal(flagString(parsed.flags, "summary"), undefined);
+  assert.notEqual(flagString(parsed.flags, "artifact"), null);
+});
+
+test("an explicitly empty flag value is preserved as an empty string", () => {
+  const parsed = parseArgs(["state", "set", "--stage", "plan", "--artifact="]);
+  assert.equal(flagString(parsed.flags, "artifact"), "");
+});
