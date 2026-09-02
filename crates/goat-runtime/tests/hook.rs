@@ -86,7 +86,7 @@ fn session_start_surfaces_objective_and_missing_evidence() {
         "in-flight stage missing: {response}"
     );
     assert!(
-        response.contains("NO EVIDENCE RECORDED"),
+        response.contains("UNPROVEN — no evidence recorded"),
         "unproven claim not flagged: {response}"
     );
     assert!(response.contains("\"hookEventName\":\"SessionStart\""));
@@ -117,4 +117,36 @@ fn a_response_never_carries_a_block_decision() {
             );
         }
     }
+}
+
+/// The native and Node paths must agree on which claims are backed, or a resumed session
+/// reports a stage as proven that `goat status` reports as unproven.
+#[test]
+fn session_start_rejects_failing_and_no_op_evidence() {
+    let dir = sandbox("weak-evidence");
+    fs::write(
+        dir.join(".goat").join("state").join("state.json"),
+        r#"{"stages":{
+            "plan":{"status":"complete","evidence":[{"command":"npm test","exitCode":1,"at":"t"}]},
+            "ultraqa":{"status":"complete","evidence":[{"command":"true","exitCode":0,"at":"t"}]},
+            "team":{"status":"complete","evidence":[{"command":"npm run lint","exitCode":0,"at":"t"}]}
+        }}"#,
+    )
+    .expect("write state");
+
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "t") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(
+        response.contains("every recorded command failed (last: npm test -> exit 1)"),
+        "a failing command was accepted as proof: {response}"
+    );
+    assert!(
+        response.contains("every recorded command is a shell no-op"),
+        "a shell no-op was accepted as proof: {response}"
+    );
+    assert!(
+        response.contains("$team: complete, 1 evidence entr(ies)"),
+        "a real passing command was not accepted: {response}"
+    );
 }

@@ -19,10 +19,9 @@ after(() => {
   rmSync(sandbox, { recursive: true, force: true });
 });
 
-test("detects a stage from $, /, and bare spellings", () => {
+test("detects a stage from the $ and / spellings", () => {
   assert.equal(detectStage("$ultraqa run the suite"), "ultraqa");
   assert.equal(detectStage("/code-review please"), "code-review");
-  assert.equal(detectStage("plan the migration"), "plan");
 });
 
 test("does not invent a stage from ordinary prose", () => {
@@ -47,7 +46,7 @@ test("SessionStart flags a completed stage that recorded no evidence", () => {
   updateStage("ultragoal", { status: "complete" });
   const context = handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput
     ?.additionalContext;
-  assert.match(context ?? "", /NO EVIDENCE RECORDED/);
+  assert.match(context ?? "", /UNPROVEN — no evidence recorded/);
 });
 
 test("UserPromptSubmit attaches the entry contract for the invoked stage", () => {
@@ -81,4 +80,38 @@ test("the response never contains a block decision", () => {
     JSON.stringify({ hook_event_name: "UserPromptSubmit", cwd: process.cwd(), prompt: "$plan x" }),
   );
   assert.ok(!raw.includes('"decision"'), "hook must never be able to block a turn");
+});
+
+// Regression: detectStage matched a bare leading word, so ordinary prose was treated as a
+// stage invocation — which also paid for the contract report's `git status` probe.
+test("ordinary prose is not treated as a stage invocation", () => {
+  for (const prompt of [
+    "plan the migration",
+    "team review this",
+    "clarify what you meant",
+    "review the code-review process",
+    "can you plan this out",
+  ]) {
+    assert.equal(detectStage(prompt), null, `${JSON.stringify(prompt)} fired a stage`);
+  }
+});
+
+test("an explicit sigil is still detected anywhere in the prompt", () => {
+  assert.equal(detectStage("$plan the migration"), "plan");
+  assert.equal(detectStage("please run /ultraqa on this"), "ultraqa");
+  assert.equal(detectStage("first $code-review then ship"), "code-review");
+});
+
+test("UserPromptSubmit stays silent — and spawns no subprocess — for ordinary prose", () => {
+  assert.deepEqual(
+    handleHook({ hook_event_name: "UserPromptSubmit", cwd: process.cwd(), prompt: "plan the migration" }),
+    {},
+  );
+});
+
+test("SessionStart reports why a completed stage is unproven", () => {
+  updateStage("plan", { status: "complete", evidence: [{ command: "true", exitCode: 0, at: "t" }] });
+  const context =
+    handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
+  assert.match(context, /UNPROVEN — every recorded command is a shell no-op/);
 });

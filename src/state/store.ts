@@ -13,7 +13,10 @@ export interface StageState {
   artifact: string | null;
   summary: string | null;
   updatedAt: string | null;
-  /** Recorded commands that prove the stage's claims. Empty means "unproven". */
+  /**
+   * Commands recorded against this stage. Presence is not proof — see
+   * {@link isSubstantiveEvidence}, which is what decides whether a claim is backed.
+   */
   evidence: EvidenceRef[];
 }
 
@@ -22,6 +25,43 @@ export interface EvidenceRef {
   exitCode: number;
   at: string;
   note?: string;
+}
+
+/**
+ * Shell no-ops that exit 0 without checking anything.
+ *
+ * This list is a lint against lazy proof, not a security control: `bash -c true` defeats
+ * it trivially. It exists because the cheap way to satisfy an evidence gate is to record
+ * something that always succeeds, and that should be called out rather than counted.
+ */
+const NO_OP_COMMANDS = new Set(["true", ":", "echo", "printf", "exit", "cd", "sleep", "noop"]);
+
+/**
+ * Does this record actually back a completion claim?
+ *
+ * A non-zero exit code is the load-bearing check. Recording a failing command and calling
+ * the stage done is the exact failure this gate exists to catch, and for the first release
+ * the exit code was stored, written to the ledger, and printed — but never compared.
+ */
+export function isSubstantiveEvidence(ref: EvidenceRef): boolean {
+  if (ref.exitCode !== 0) return false;
+  const command = ref.command.trim();
+  if (command.length === 0) return false;
+  const firstToken = command.split(/\s+/)[0] ?? "";
+  return !NO_OP_COMMANDS.has(firstToken);
+}
+
+/** Why a stage's evidence does not back its claim, or null when it does. */
+export function unprovenReason(stage: StageState): string | null {
+  if (stage.evidence.length === 0) return "no evidence recorded";
+  if (stage.evidence.some(isSubstantiveEvidence)) return null;
+
+  const failing = stage.evidence.filter((ref) => ref.exitCode !== 0);
+  if (failing.length === stage.evidence.length) {
+    const last = failing[failing.length - 1];
+    return `every recorded command failed (last: ${last?.command} -> exit ${last?.exitCode})`;
+  }
+  return "every recorded command is a shell no-op";
 }
 
 export interface GoatState {

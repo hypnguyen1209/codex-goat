@@ -2,7 +2,7 @@ import { color, log } from "../../core/log.js";
 import { checkContract } from "../../state/contract.js";
 import { readLedger } from "../../state/ledger.js";
 import { STAGE_IDS, STAGES } from "../../state/stages.js";
-import { readState } from "../../state/store.js";
+import { readState, unprovenReason } from "../../state/store.js";
 
 /**
  * Reconcile claims against proof.
@@ -22,10 +22,13 @@ export function runStatus(cwd: string = process.cwd()): number {
     const stage = state.stages[id];
     const spec = STAGES[id];
     const contract = checkContract(id, cwd);
+    // Presence of evidence is not proof: a failing command or a shell no-op is recorded
+    // just as happily as a real check.
+    const reason = stage.status === "complete" ? unprovenReason(stage) : null;
 
     const badge =
       stage.status === "complete"
-        ? stage.evidence.length > 0
+        ? reason === null
           ? color.green("complete")
           : color.yellow("complete*")
         : stage.status === "active"
@@ -34,11 +37,12 @@ export function runStatus(cwd: string = process.cwd()): number {
             ? color.red("blocked")
             : color.dim("idle");
 
-    if (stage.status === "complete" && stage.evidence.length === 0) unproven += 1;
+    if (reason !== null) unproven += 1;
 
     const readiness = contract.ready ? "ready" : "needs input";
     log.out(`${spec.invocation.padEnd(14)} ${badge}  ${color.dim(readiness)}`);
     if (stage.artifact) log.detail(`artifact: ${stage.artifact}`);
+    if (reason !== null) log.detail(color.yellow(`unproven: ${reason}`));
     if (stage.evidence.length > 0) {
       const last = stage.evidence[stage.evidence.length - 1];
       if (last) log.detail(`last evidence: ${last.command} -> exit ${last.exitCode}`);
@@ -59,8 +63,9 @@ export function runStatus(cwd: string = process.cwd()): number {
 
   if (unproven > 0) {
     log.out("");
-    log.warn(`${unproven} stage(s) marked complete with no recorded evidence (shown as complete*).`);
-    log.detail("Record proof with: goat ledger evidence --stage <stage> -- <command>");
+    log.warn(`${unproven} stage(s) marked complete without evidence that backs the claim (shown as complete*).`);
+    log.detail("Record proof with: goat ledger evidence --stage <stage> --exit <code> -- <command>");
+    log.detail("Evidence counts only when the command actually ran and exited 0.");
     return 1;
   }
   return 0;

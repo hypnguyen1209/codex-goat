@@ -6,7 +6,14 @@ import { after, beforeEach, test } from "node:test";
 import { ensureDir } from "../core/fsx.js";
 import { goatPaths } from "../core/paths.js";
 import { appendLedger, readLedger } from "../state/ledger.js";
-import { clearState, readState, updateStage } from "../state/store.js";
+import {
+  clearState,
+  type EvidenceRef,
+  isSubstantiveEvidence,
+  readState,
+  unprovenReason,
+  updateStage,
+} from "../state/store.js";
 
 // Every test writes to an isolated GOAT_ROOT so nothing touches the real project state.
 const sandbox = mkdtempSync(join(tmpdir(), "goat-state-"));
@@ -97,4 +104,48 @@ test("the ledger survives a truncated tail line", () => {
   const entries = readLedger(10);
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.summary, "intact");
+});
+
+// Regression: v0.1.0 stored `exitCode`, wrote it to the ledger, and printed it — but no
+// predicate ever compared it to 0, so `goat ledger evidence --exit 1 -- npm test` (a
+// FAILING test) satisfied the evidence gate and `goat status` exited 0.
+test("a failing command does not back a completion claim", () => {
+  updateStage("plan", { status: "complete", evidence: [{ command: "npm test", exitCode: 1, at: "t" }] });
+  const stage = readState().stages.plan;
+  assert.equal(isSubstantiveEvidence(stage.evidence[0] as EvidenceRef), false);
+  assert.match(unprovenReason(stage) ?? "", /every recorded command failed/);
+});
+
+test("a shell no-op does not back a completion claim", () => {
+  for (const command of ["true", ":", "echo done", "  exit 0", "printf ok"]) {
+    assert.equal(isSubstantiveEvidence({ command, exitCode: 0, at: "t" }), false, `${command} was accepted`);
+  }
+});
+
+test("a real command that exited 0 does back the claim", () => {
+  for (const command of ["npm test", "cargo test -p goat-runtime", "./scripts/check.sh"]) {
+    assert.equal(isSubstantiveEvidence({ command, exitCode: 0, at: "t" }), true, `${command} was rejected`);
+  }
+  updateStage("ultraqa", { status: "complete", evidence: [{ command: "npm test", exitCode: 0, at: "t" }] });
+  assert.equal(unprovenReason(readState().stages.ultraqa), null);
+});
+
+test("one passing command is enough even alongside failures", () => {
+  updateStage("team", {
+    status: "complete",
+    evidence: [
+      { command: "npm test", exitCode: 1, at: "t1" },
+      { command: "npm test", exitCode: 0, at: "t2" },
+    ],
+  });
+  assert.equal(unprovenReason(readState().stages.team), null);
+});
+
+test("an empty command is never proof", () => {
+  assert.equal(isSubstantiveEvidence({ command: "   ", exitCode: 0, at: "t" }), false);
+});
+
+test("a stage with no evidence reports why", () => {
+  updateStage("clarify", { status: "complete" });
+  assert.equal(unprovenReason(readState().stages.clarify), "no evidence recorded");
 });

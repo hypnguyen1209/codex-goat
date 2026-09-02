@@ -72,15 +72,39 @@ jobs:
           test -f .codex/hooks.json
           grep -q 'GOAT:AGENTS:START' AGENTS.md
 
-          # An unproven completion must fail the status gate.
-          node "$GOAT" state set --stage plan --status complete
+          # The evidence gate has three holes worth guarding, all of them regressions we
+          # actually shipped in v0.1.0. Each arm must FAIL the status gate.
+          node "$GOAT" state set --stage plan --status complete --artifact .goat/plans/p.md
           if node "$GOAT" status; then
-            echo "status should have failed on a stage completed without evidence" >&2
+            echo "FAIL: a completion with no evidence passed the gate" >&2
+            exit 1
+          fi
+
+          node "$GOAT" ledger evidence --stage plan --exit 1 -- npm test
+          if node "$GOAT" status; then
+            echo "FAIL: a command that exited 1 was accepted as proof" >&2
             exit 1
           fi
 
           node "$GOAT" ledger evidence --stage plan --exit 0 -- true
+          if node "$GOAT" status; then
+            echo "FAIL: a shell no-op was accepted as proof" >&2
+            exit 1
+          fi
+
+          # Only a real command that actually exited 0 closes the gate.
+          node "$GOAT" ledger evidence --stage plan --exit 0 -- npm run lint
           node "$GOAT" status
+
+          # A later `state set` must not erase the artifact an earlier call recorded.
+          node "$GOAT" state set --stage plan --status complete
+          node -e "
+            const s = JSON.parse(require('node:fs').readFileSync('.goat/state/state.json', 'utf8'));
+            if (s.stages.plan.artifact !== '.goat/plans/p.md') {
+              console.error('FAIL: artifact was erased ->', s.stages.plan.artifact);
+              process.exit(1);
+            }
+          "
 
           node "$GOAT" uninstall --scope project
           test ! -d .agents/skills/plan

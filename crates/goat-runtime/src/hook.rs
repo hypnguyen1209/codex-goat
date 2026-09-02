@@ -59,6 +59,66 @@ fn additional_context(event: &str, context: &str) -> String {
     )
 }
 
+/// Shell no-ops that exit 0 without checking anything.
+///
+/// Mirrors `NO_OP_COMMANDS` in `src/state/store.ts`. A lint against lazy proof, not a
+/// security control.
+const NO_OP_COMMANDS: &[&str] = &["true", ":", "echo", "printf", "exit", "cd", "sleep", "noop"];
+
+/// Does one recorded command actually back a completion claim?
+///
+/// Mirrors `isSubstantiveEvidence` in `src/state/store.ts`. A resumed session and
+/// `goat status` must never disagree about which claims are proven.
+fn is_substantive(entry: &Json) -> bool {
+    let exit_code = match entry.get("exitCode") {
+        Some(Json::Number(code)) => *code,
+        _ => return false,
+    };
+    if exit_code != 0.0 {
+        return false;
+    }
+    let command = entry.get("command").and_then(Json::as_str).unwrap_or_default().trim();
+    if command.is_empty() {
+        return false;
+    }
+    let first_token = command.split_whitespace().next().unwrap_or_default();
+    !NO_OP_COMMANDS.contains(&first_token)
+}
+
+/// Why a completed stage's evidence does not back its claim, or `None` when it does.
+///
+/// Mirrors `unprovenReason` in `src/state/store.ts`.
+fn unproven_reason(evidence: Option<&Vec<Json>>) -> Option<String> {
+    let entries = match evidence {
+        Some(entries) if !entries.is_empty() => entries,
+        _ => return Some("no evidence recorded".to_string()),
+    };
+    if entries.iter().any(is_substantive) {
+        return None;
+    }
+
+    let failing: Vec<&Json> = entries
+        .iter()
+        .filter(|entry| !matches!(entry.get("exitCode"), Some(Json::Number(code)) if *code == 0.0))
+        .collect();
+
+    if failing.len() == entries.len() {
+        let last = failing.last();
+        let command = last
+            .and_then(|entry| entry.get("command"))
+            .and_then(Json::as_str)
+            .unwrap_or_default();
+        let code = match last.and_then(|entry| entry.get("exitCode")) {
+            Some(Json::Number(code)) => *code as i64,
+            _ => 0,
+        };
+        return Some(format!(
+            "every recorded command failed (last: {command} -> exit {code})"
+        ));
+    }
+    Some("every recorded command is a shell no-op".to_string())
+}
+
 /// Stage ids, in the order `src/state/stages.ts` declares them.
 const STAGES: &[(&str, &str)] = &[
     ("clarify", "$clarify"),
@@ -88,11 +148,7 @@ fn session_start_context(cwd: &Path) -> Option<String> {
             };
             let status = stage.get("status").and_then(Json::as_str).unwrap_or("idle");
             let artifact = stage.get("artifact").and_then(Json::as_str).unwrap_or_default();
-            let evidence = stage
-                .get("evidence")
-                .and_then(Json::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
+            let evidence = stage.get("evidence").and_then(Json::as_array);
 
             match status {
                 "active" | "blocked" => {
@@ -104,10 +160,9 @@ fn session_start_context(cwd: &Path) -> Option<String> {
                     in_flight.push(format!("- {invocation}: {status}{suffix}"));
                 }
                 "complete" => {
-                    let proof = if evidence > 0 {
-                        format!("{evidence} evidence entr(ies)")
-                    } else {
-                        "NO EVIDENCE RECORDED".to_string()
+                    let proof = match unproven_reason(evidence) {
+                        None => format!("{} evidence entr(ies)", evidence.map(Vec::len).unwrap_or(0)),
+                        Some(reason) => format!("UNPROVEN — {reason}"),
                     };
                     complete.push(format!("- {invocation}: complete, {proof}"));
                 }

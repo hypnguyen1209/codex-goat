@@ -4,7 +4,7 @@ import { findProjectRoot } from "../core/paths.js";
 import { checkContract } from "../state/contract.js";
 import { memoryDigest, recordObservation } from "../state/memory.js";
 import { normalizeStageId, STAGES, type StageId } from "../state/stages.js";
-import { readState } from "../state/store.js";
+import { readState, unprovenReason } from "../state/store.js";
 
 /**
  * The one hook handler, for every Codex lifecycle event codex-goat subscribes to.
@@ -17,7 +17,10 @@ import { readState } from "../state/store.js";
  *   1. Never block. No event ever returns a `block` decision — a broken helper must not
  *      be able to stop the user's session.
  *   2. Never throw. Any failure degrades to empty output and exit 0.
- *   3. Stay cheap. Only reads small local files; no network, no subprocess.
+ *   3. Stay cheap, and never touch the network. Local file reads, plus at most one
+ *      `git status --porcelain` with a 5s timeout — and only when the prompt explicitly
+ *      invokes a stage whose contract depends on the working tree. Ordinary prompts run
+ *      no subprocess at all.
  */
 
 export interface HookInput {
@@ -85,7 +88,10 @@ function sessionStartContext(cwd: string): string | null {
   if (done.length > 0) {
     const lines = done.map((id) => {
       const stage = state.stages[id];
-      const proof = stage.evidence.length > 0 ? `${stage.evidence.length} evidence entr(ies)` : "NO EVIDENCE RECORDED";
+      // Same predicate `goat status` uses, so a resumed session and the CLI never
+      // disagree about which claims are actually backed.
+      const reason = unprovenReason(stage);
+      const proof = reason === null ? `${stage.evidence.length} evidence entr(ies)` : `UNPROVEN — ${reason}`;
       return `- ${STAGES[id].invocation}: complete, ${proof}`;
     });
     blocks.push(`Stages already complete:\n${lines.join("\n")}`);
@@ -125,15 +131,17 @@ function userPromptContext(prompt: string, sessionId: string, cwd: string): stri
   return parts.join("\n");
 }
 
-/** Matches `$plan`, `/plan`, and a bare leading `plan` — the three spellings users type. */
+/**
+ * Matches an explicit invocation: `$plan` or `/plan`.
+ *
+ * The sigil is required. v0.1.0 also accepted a bare leading word, which meant ordinary
+ * prose — "plan the migration", "team review this" — was treated as a stage invocation
+ * and paid for a contract report, including its `git status` probe. Every skill and every
+ * doc spells these with a sigil, so requiring one costs nothing.
+ */
 export function detectStage(prompt: string): StageId | null {
-  const match = prompt.match(/(?:^|\s)([$/])([a-z][a-z-]*)/i);
-  if (match?.[2]) {
-    const stage = normalizeStageId(match[2]);
-    if (stage) return stage;
-  }
-  const leading = prompt.trim().split(/\s+/)[0];
-  return leading ? normalizeStageId(leading) : null;
+  const match = prompt.match(/(?:^|\s)[$/]([a-z][a-z-]*)/i);
+  return match?.[1] ? normalizeStageId(match[1]) : null;
 }
 
 function readOptional(file: string): string | null {
