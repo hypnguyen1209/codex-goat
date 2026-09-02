@@ -112,12 +112,26 @@ function segment(input: string): Array<[boolean, string]> {
   return segments;
 }
 
+/**
+ * Remove every filler occurrence, not just the first few.
+ *
+ * Each pass deletes at most one occurrence and then restarts, because removing a phrase
+ * shifts every later index and can expose a new match ("let me actually …"). v0.1.0 broke
+ * out of the phrase loop and capped at three passes, so a sentence with ten filler
+ * phrases kept seven of them. The bound is now proportional to the work available: every
+ * pass that changes anything strictly shortens the string, so this terminates.
+ */
 function stripFiller(text: string): string {
   let out = text;
-  // Repeat until stable: removing one filler can expose another ("let me actually …").
-  for (let round = 0; round < 3; round += 1) {
+  const maxPasses = text.length + 1;
+
+  for (let pass = 0; pass < maxPasses; pass += 1) {
     const lower = out.toLowerCase();
-    let changed = false;
+    let removedAt = -1;
+    let removedLength = 0;
+
+    // Prefer the earliest match in the string so removal order is position-driven and
+    // therefore independent of the order phrases happen to appear in FILLER.
     for (const phrase of FILLER) {
       let searchFrom = 0;
       for (;;) {
@@ -125,16 +139,20 @@ function stripFiller(text: string): string {
         if (found < 0) break;
         const boundary = found === 0 || !/[\p{L}\p{N}]/u.test(lower[found - 1] as string);
         if (boundary) {
-          out = out.slice(0, found) + out.slice(found + phrase.length);
-          changed = true;
+          if (removedAt < 0 || found < removedAt) {
+            removedAt = found;
+            removedLength = phrase.length;
+          }
           break;
         }
         searchFrom = found + phrase.length;
       }
-      if (changed) break;
     }
-    if (!changed) break;
+
+    if (removedAt < 0) break;
+    out = out.slice(0, removedAt) + out.slice(removedAt + removedLength);
   }
+
   return out;
 }
 

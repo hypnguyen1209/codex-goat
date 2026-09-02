@@ -78,3 +78,21 @@ test("matches the shared compression fixture used by the native runtime", () => 
     assert.equal(compress(testCase.input), testCase.expected, `diverged on: ${testCase.input}`);
   }
 });
+
+// Regression: stripFiller broke out of the phrase loop on the first hit and capped at 3
+// rounds, so a sentence containing ten filler phrases kept seven of them.
+test("every filler occurrence is stripped, not just the first three", () => {
+  const output = compress("I will basically actually essentially obviously of course let me just say I think I believe it seems that we should fix it");
+  for (const filler of ["basically", "actually", "essentially", "obviously", "of course", "let me", "I think", "I believe", "it seems that"]) {
+    assert.ok(!output.toLowerCase().includes(filler.toLowerCase()), `"${filler}" survived: ${output}`);
+  }
+});
+
+test("repeated occurrences of one phrase are all removed", () => {
+  assert.equal(compress("let me let me let me let me let me stop"), "stop");
+});
+
+test("compression terminates on adversarial input", () => {
+  assert.equal(compress("of course ".repeat(200)).length, 0);
+  assert.ok(compress("a".repeat(5000)).length === 5000);
+});

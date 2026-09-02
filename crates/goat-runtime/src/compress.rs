@@ -109,12 +109,26 @@ fn is_protected_token(token: &str) -> bool {
     false
 }
 
+/// Remove every filler occurrence, not just the first few.
+///
+/// Each pass deletes at most one occurrence and then restarts, because removing a phrase
+/// shifts every later index and can expose a new match ("let me actually ..."). v0.1.0
+/// broke out of the phrase loop and capped at three passes, so a sentence with ten filler
+/// phrases kept seven. The bound is proportional to the work available: every pass that
+/// changes anything strictly shortens the string, so this terminates.
+///
+/// Kept behaviourally identical to `stripFiller` in `src/state/memory.ts`; the shared
+/// fixture in `tests/fixtures/compress.json` is what proves it.
 fn strip_filler(text: &str) -> String {
     let mut out = text.to_string();
-    // Repeat until stable: removing one filler can expose another ("let me actually ...").
-    for _ in 0..3 {
+    let max_passes = text.len() + 1;
+
+    for _ in 0..max_passes {
         let lower = out.to_lowercase();
-        let mut changed = false;
+        let mut removal: Option<(usize, usize)> = None;
+
+        // Prefer the earliest match in the string so removal order is position-driven and
+        // therefore independent of the order phrases happen to appear in FILLER.
         for phrase in FILLER {
             let mut search_from = 0;
             while let Some(found) = lower[search_from..].find(phrase) {
@@ -122,8 +136,9 @@ fn strip_filler(text: &str) -> String {
                 // Only strip at a word boundary.
                 let boundary = start == 0 || !lower.as_bytes()[start - 1].is_ascii_alphanumeric();
                 if boundary {
-                    out.replace_range(start..start + phrase.len(), "");
-                    changed = true;
+                    if removal.is_none_or(|(at, _)| start < at) {
+                        removal = Some((start, phrase.len()));
+                    }
                     break;
                 }
                 search_from = start + phrase.len();
@@ -131,14 +146,14 @@ fn strip_filler(text: &str) -> String {
                     break;
                 }
             }
-            if changed {
-                break;
-            }
         }
-        if !changed {
-            break;
+
+        match removal {
+            Some((start, len)) => out.replace_range(start..start + len, ""),
+            None => break,
         }
     }
+
     out
 }
 

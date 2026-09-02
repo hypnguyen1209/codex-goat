@@ -54,5 +54,13 @@
   {
     "input": "Keep `code with let me inside` untouched",
     "expected": "Keep `code with let me inside` untouched"
+  },
+  {
+    "input": "I will basically actually essentially obviously of course let me just say I think I believe it seems that we should fix it",
+    "expected": "just say we should fix it"
+  },
+  {
+    "input": "let me let me let me let me let me stop",
+    "expected": "stop"
   }
 ]
