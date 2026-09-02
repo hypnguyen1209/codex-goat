@@ -1,0 +1,68 @@
+{
+  "name": "codex-goat",
+  "version": "0.1.0",
+  "description": "A stronger default for OpenAI Codex CLI: better prompts, one consistent workflow, and runtime helpers. Codex stays the execution engine.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "goat": "dist/cli/goat.js",
+    "codex-goat": "dist/cli/goat.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/clean.mjs && tsc && node scripts/chmod-bin.mjs",
+    "build:native": "cargo build --release -p goat-runtime",
+    "build:bun": "bun build src/cli/goat.ts --compile --minify --outfile bin/goat",
+    "dev": "tsc --watch",
+    "lint": "biome lint src",
+    "format": "biome format --write src",
+    "test": "npm run build && npm run test:unit && npm run test:contract",
+    "test:unit": "node --test \"dist/__tests__/*.test.js\"",
+    "test:contract": "node scripts/verify-bundle.mjs",
+    "test:native": "cargo test -p goat-runtime",
+    "verify": "npm run lint && npm run test && npm run test:native",
+    "setup": "node dist/cli/goat.js setup",
+    "doctor": "node dist/cli/goat.js doctor",
+    "prepack": "npm run build"
+  },
+  "files": [
+    "dist/",
+    "scripts/",
+    "skills/",
+    "prompts/",
+    "templates/",
+    "hooks/",
+    "crates/",
+    "Cargo.toml",
+    "Cargo.lock",
+    ".codex-plugin/",
+    ".agents/plugins/marketplace.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "codex",
+    "codex-cli",
+    "openai",
+    "agents",
+    "skills",
+    "workflow",
+    "orchestration",
+    "prompt-engineering"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hypnguyen1209/codex-goat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hypnguyen1209/codex-goat/issues"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

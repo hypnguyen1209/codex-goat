@@ -1,0 +1,7 @@
+# Normalize to LF in the repository. The hook script and the skills are read by Codex on
+# every platform, and mixed endings make their diffs unreadable.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary

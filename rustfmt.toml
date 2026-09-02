@@ -1,0 +1,3 @@
+# Matches the 120-column limit biome enforces on the TypeScript side, so the two
+# halves of the codebase read the same width.
+max_width = 120

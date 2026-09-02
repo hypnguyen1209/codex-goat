@@ -1,0 +1,20 @@
+[package]
+name = "goat-runtime"
+description = "Fast native hook and state helper for codex-goat. Optional; the Node fallback is always available."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "goat-runtime"
+path = "src/main.rs"
+
+[lib]
+name = "goat_runtime"
+path = "src/lib.rs"
+
+[dependencies]
+# No external crates on purpose: the whole value of this binary is starting in
+# single-digit milliseconds, and a hand-written JSON reader keeps it dependency-free
+# and trivially auditable.

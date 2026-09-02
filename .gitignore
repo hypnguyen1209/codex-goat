@@ -1,0 +1,31 @@
+# build output
+dist/
+target/
+bin/
+*.tsbuildinfo
+
+# dependencies
+node_modules/
+.pnp.*
+
+# runtime state written by codex-goat itself
+.goat/
+.codex/
+!templates/.codex/
+
+# specs, plans, and working notes stay local
+docs/
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# logs and local env
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+coverage/
