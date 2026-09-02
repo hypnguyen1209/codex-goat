@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: node (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:unit
+      # Catches what unit tests cannot: skill frontmatter Codex would reject, a declared
+      # stage with no skill, an unindexed role prompt, a hook pointing at an unshipped file.
+      - run: npm run test:contract
+
+  native:
+    name: native runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy -p goat-runtime --all-targets -- -D warnings
+      # Includes the fixture shared with the TypeScript compressor, so the two
+      # implementations cannot drift apart.
+      - run: cargo test -p goat-runtime
+
+  smoke:
+    name: install smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: setup, doctor, and uninstall against a scratch project
+        run: |
+          set -euo pipefail
+          GOAT="$PWD/dist/cli/goat.js"
+          mkdir -p /tmp/scratch && cd /tmp/scratch
+          git init -q && echo '{"name":"scratch"}' > package.json
+
+          node "$GOAT" setup --scope project
+          # doctor exits non-zero on a failed check; codex is absent here, so only
+          # assert that the goat-owned parts installed.
+          node "$GOAT" doctor || true
+          test -f .agents/skills/plan/SKILL.md
+          test -f .codex/hooks.json
+          grep -q 'GOAT:AGENTS:START' AGENTS.md
+
+          # An unproven completion must fail the status gate.
+          node "$GOAT" state set --stage plan --status complete
+          if node "$GOAT" status; then
+            echo "status should have failed on a stage completed without evidence" >&2
+            exit 1
+          fi
+
+          node "$GOAT" ledger evidence --stage plan --exit 0 -- true
+          node "$GOAT" status
+
+          node "$GOAT" uninstall --scope project
+          test ! -d .agents/skills/plan
+          test -d .goat   # durable state must survive uninstall
