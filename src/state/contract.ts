@@ -14,7 +14,15 @@ import { readState } from "./store.js";
  * is reported as `inline`, not as a failure.
  */
 
-export type RequirementVerdict = "satisfied" | "inline" | "missing";
+/**
+ * Only two verdicts exist, and that is the point.
+ *
+ * There is deliberately no "missing": a stage is never hard-blocked, because a
+ * requirement the user can state in their own message is not an obstacle. The type
+ * carried a third `"missing"` case in v0.1.0 that nothing ever produced, which made the
+ * readiness filter a tautology and hid the invariant behind an unreachable branch.
+ */
+export type RequirementVerdict = "satisfied" | "inline";
 
 export interface RequirementCheck {
   requirement: RequirementKind;
@@ -25,7 +33,11 @@ export interface RequirementCheck {
 export interface ContractReport {
   stage: StageId;
   invocation: string;
-  ready: boolean;
+  /**
+   * Always true. Kept so callers can render it and so the guarantee is visible in the
+   * report itself; it is not a gate, and no command should branch on it failing.
+   */
+  ready: true;
   checks: RequirementCheck[];
   suggestion: string | null;
 }
@@ -88,11 +100,13 @@ export function checkContract(stage: StageId, cwd: string = process.cwd()): Cont
     }
   });
 
-  const missing = checks.filter((check) => check.verdict === "missing");
+  // Always true, and deliberately so: every requirement is either already satisfied or
+  // satisfiable from the user's message, so a stage can always start. `ready` is kept as
+  // a field because callers render it, not because it can be false.
   return {
     stage,
     invocation: spec.invocation,
-    ready: missing.length === 0,
+    ready: true,
     checks,
     suggestion: suggestFor(stage, checks),
   };

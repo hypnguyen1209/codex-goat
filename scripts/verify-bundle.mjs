@@ -134,6 +134,45 @@ check("plugin hooks path", plugin.hooks === "./hooks/hooks.json", `unexpected ho
 // --- templates --------------------------------------------------------------
 check("AGENTS template exists", existsSync(join(root, "templates", "AGENTS.md")), "templates/AGENTS.md is missing");
 
+// --- invariants that were once only prose ------------------------------------
+// v0.1.0 declared a "missing" requirement verdict that nothing produced, which made the
+// readiness filter a tautology and hid the never-hard-block rule behind a dead branch.
+const contractSource = readFileSync(join(root, "src", "state", "contract.ts"), "utf8");
+check(
+  "no dead requirement verdict",
+  !/RequirementVerdict\s*=[^;]*"missing"/.test(contractSource),
+  'RequirementVerdict must stay "satisfied" | "inline" — a third verdict would make a stage hard-blockable',
+);
+
+// The evidence gate is the project's central claim. If nothing compares exitCode, a
+// failing command counts as proof — which is exactly the bug this check exists to prevent.
+const storeSource = readFileSync(join(root, "src", "state", "store.ts"), "utf8");
+// Scoped to the predicate's own body: `exitCode !== 0` also appears in unprovenReason, so
+// searching the whole file would keep passing after the gate itself stopped checking.
+const substantiveBody = storeSource.match(
+  /export function isSubstantiveEvidence\([^)]*\)[^{]*\{([\s\S]*?)\n\}/,
+);
+check(
+  "evidence gate inspects the exit code",
+  Boolean(substantiveBody) && /exitCode\s*!==\s*0/.test(substantiveBody[1]),
+  "isSubstantiveEvidence must itself reject a non-zero exit code",
+);
+
+// The native hook path renders the same verdicts; if the two lists diverge, a resumed
+// session and `goat status` disagree about which claims are proven.
+const rustHook = readFileSync(join(root, "crates", "goat-runtime", "src", "hook.rs"), "utf8");
+const noOpList = (source) => {
+  const match = source.match(/NO_OP_COMMANDS[^=]*=\s*(?:new Set\()?[&]?\[([^\]]*)\]/);
+  return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]).sort() : null;
+};
+const tsNoOps = noOpList(storeSource);
+const rustNoOps = noOpList(rustHook);
+check(
+  "no-op command lists agree across the Node and native hook paths",
+  tsNoOps !== null && rustNoOps !== null && JSON.stringify(tsNoOps) === JSON.stringify(rustNoOps),
+  `store.ts=${JSON.stringify(tsNoOps)} vs hook.rs=${JSON.stringify(rustNoOps)}`,
+);
+
 // --- report -----------------------------------------------------------------
 if (failures.length > 0) {
   console.error(`bundle contract: ${failures.length} failure(s) of ${checks.length} checks\n`);
