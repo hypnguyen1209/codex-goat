@@ -1,0 +1,33 @@
+{
+  "name": "codex-goat",
+  "version": "0.1.0",
+  "description": "A stronger default for Codex CLI: six independently-invocable workflow stages, specialist role cards, and an evidence ledger that makes 'done' auditable.",
+  "homepage": "https://github.com/hypnguyen1209/codex-goat",
+  "repository": "https://github.com/hypnguyen1209/codex-goat",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "workflow",
+    "planning",
+    "code-review",
+    "qa",
+    "agents",
+    "skills"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "codex-goat",
+    "shortDescription": "Six independent workflow stages plus an evidence ledger for Codex.",
+    "longDescription": "codex-goat keeps Codex as the execution engine and adds a stronger default around it: $clarify, $plan, $ultragoal, $team, $code-review, and $ultraqa, each invocable on its own with an explicit entry contract; nine specialist role cards; and durable state under .goat/ where every completion claim is backed by a recorded command and exit code.",
+    "category": "Coding",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "websiteURL": "https://github.com/hypnguyen1209/codex-goat",
+    "defaultPrompt": [
+      "Use $plan to write an evidence-backed plan before implementing.",
+      "Use $ultragoal to finish this with checkpoint evidence.",
+      "Use $code-review to review my changes and verify each finding.",
+      "Use $ultraqa to prove this works against adversarial scenarios."
+    ]
+  }
+}

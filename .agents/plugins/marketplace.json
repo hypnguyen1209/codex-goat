@@ -1,0 +1,19 @@
+{
+  "name": "codex-goat",
+  "interface": {
+    "displayName": "codex-goat"
+  },
+  "plugins": [
+    {
+      "name": "codex-goat",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
