@@ -66,3 +66,149 @@ jobs:
       - name: Dry run
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run
         run: npm publish --dry-run --access public
+
+  # The native helper is optional — hooks/goat-hook.mjs falls back to the Node handler
+  # when it is absent. But building it required a Rust toolchain, so in practice nobody
+  # had it and the fast path was theoretical. Prebuilt binaries make it a download.
+  build-native:
+    name: goat-runtime (${{ matrix.name }})
+    needs: publish
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - name: linux-arm64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            cross_linker: aarch64-linux-gnu-gcc
+            apt_packages: gcc-aarch64-linux-gnu
+          - name: darwin-x64
+            # Built on Apple Silicon: the Intel runner pool queues for a long time and
+            # the macos-14 toolchain targets x86_64 without trouble.
+            os: macos-14
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - name: darwin-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: ".exe"
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross linker
+        if: matrix.apt_packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt_packages }}
+
+      - name: Build
+        shell: bash
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.cross_linker }}
+        run: cargo build --release --locked --target ${{ matrix.target }} -p goat-runtime
+
+      # A binary that cannot answer `version` is not worth publishing. Skipped where the
+      # host cannot execute the target it just built.
+      - name: Smoke test the binary
+        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}"
+          "$BIN" version
+          # An unparseable payload must still yield valid JSON and exit 0: a hook may
+          # never break the session it is attached to.
+          echo 'not json' | "$BIN" hook
+          test "$(echo 'not json' | "$BIN" hook)" = "{}"
+
+      - name: Stage
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="goat-runtime-${VERSION}-${{ matrix.name }}"
+          mkdir "${STAGE}"
+          cp "target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}" "${STAGE}/"
+          cp LICENSE "${STAGE}/"
+          cat > "${STAGE}/README.txt" <<EOF
+          goat-runtime ${VERSION} (${{ matrix.name }})
+
+          Optional native fast path for codex-goat's SessionStart and Stop hooks.
+          codex-goat works without it; this only makes those two hooks faster.
+
+          Install: put goat-runtime${{ matrix.ext }} next to the codex-goat package as
+          bin/goat-runtime${{ matrix.ext }}, or point GOAT_RUNTIME_BIN at it:
+
+            export GOAT_RUNTIME_BIN=/path/to/goat-runtime${{ matrix.ext }}
+
+          Verify with: goat doctor   (the "native runtime" check should read PASS)
+          EOF
+          echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
+
+      - name: Archive
+        shell: bash
+        run: |
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "${STAGE}.zip" "${STAGE}" >/dev/null
+            echo "ARCHIVE=${STAGE}.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "${STAGE}.tar.gz" "${STAGE}"
+            echo "ARCHIVE=${STAGE}.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goat-runtime-${{ matrix.name }}
+          path: ${{ env.ARCHIVE }}
+
+  release:
+    needs: build-native
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksum
+        working-directory: artifacts
+        run: |
+          # Name the archives explicitly so checksums.txt cannot hash itself.
+          sha256sum goat-runtime-* > checksums.txt
+          cat checksums.txt
+
+      - name: Every asset must be checksummed
+        working-directory: artifacts
+        run: |
+          status=0
+          for f in goat-runtime-*; do
+            grep -q "  ${f}\$" checksums.txt || { echo "::error::${f} missing from checksums.txt"; status=1; }
+          done
+          # Five platforms in the matrix; a silently missing one is the failure this catches.
+          count=$(ls goat-runtime-* | wc -l)
+          [ "$count" -eq 5 ] || { echo "::error::expected 5 archives, found ${count}"; status=1; }
+          exit "${status}"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*

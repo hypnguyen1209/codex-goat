@@ -217,7 +217,16 @@ Three properties hold for every hook, and are covered by tests in both implement
 
 ### The native fast path
 
-`crates/goat-runtime` is an optional dependency-free Rust binary that handles `SessionStart` and `Stop` in a few milliseconds instead of paying Node's startup cost:
+`crates/goat-runtime` is an optional dependency-free Rust binary that handles `SessionStart` and `Stop` in a few milliseconds instead of paying Node's startup cost.
+
+Every release attaches prebuilt binaries for linux-x64, linux-arm64, darwin-x64, darwin-arm64, and windows-x64, with a `checksums.txt`. Download one from [Releases](https://github.com/hypnguyen1209/codex-goat/releases), then either drop it next to the installed package as `bin/goat-runtime` or point at it:
+
+```bash
+export GOAT_RUNTIME_BIN=/path/to/goat-runtime
+goat doctor            # the "native runtime" check should now read PASS
+```
+
+With a Rust toolchain you can build it yourself instead:
 
 ```bash
 npm run build:native
