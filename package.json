@@ -19,7 +19,7 @@
     "lint": "biome lint src",
     "format": "biome format --write src",
     "test": "npm run build && npm run test:unit && npm run test:contract",
-    "test:unit": "node --test \"dist/__tests__/*.test.js\"",
+    "test:unit": "node scripts/run-tests.mjs",
     "test:contract": "node scripts/verify-bundle.mjs",
     "test:native": "cargo test -p goat-runtime",
     "verify": "npm run lint && npm run test && npm run test:native",
