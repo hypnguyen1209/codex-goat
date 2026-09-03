@@ -436,6 +436,57 @@ flowchart LR
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
+## Model routing: plan on Sol, execute on Luna
+
+A Codex session runs one model, so a stage cannot switch models mid-conversation. What makes per-stage routing work is that `.goat/` is durable: `$plan` writes an artifact, the session ends, and a new session on a different model picks it up through the same entry contract. The split is **across sessions**, not inside one — which is exactly what the entry-contract design was for.
+
+```bash
+goat --for plan --madmax        # deliberation session  -> gpt-5.6-sol
+#   $clarify / $plan / $code-review, writes .goat/plans/…
+
+goat --for ultragoal --madmax   # execution session     -> gpt-5.6-luna
+#   $ultragoal picks up the plan artifact and runs
+```
+
+| Stage | Routed to | |
+| --- | --- | --- |
+| `$clarify`, `$plan`, `$code-review` | `gpt-5.6-sol` | deliberation and judgement |
+| `$ultragoal`, `$team`, `$ultraqa` | `gpt-5.6-luna` | execution and throughput |
+
+`goat skills` prints the route for every stage, and `goat --for plan --print-argv` shows the exact `codex` command before you run it.
+
+### Why this split
+
+Two reasons, and it is worth being precise about which is measurement and which is not:
+
+- **Codex positions them this way.** Its model catalog ranks `gpt-5.6-sol` priority 0 and makes it the default; `gpt-5.6-luna` sits at priority 2. Codex also routes its *own* auxiliary work to luna — approval review, memory extraction, and guardian scoring all name it explicitly.
+- **Measured here:** luna finished faster in all six model × effort cells and carries a 1,558-token lighter always-on prefix.
+
+**Not measured: output quality.** Nothing in this repo grades correctness, and the task benchmark could not separate the two models on token use at all — per-task direction swung from −58% to +176%. Treat the defaults as a sensible starting point, not a proven optimum.
+
+### Overriding it
+
+Explicit flags always win, and routing only fills a gap you left:
+
+```bash
+goat --for plan -m gpt-5.6-terra     # your model wins; goat says so in its notes
+goat --for ultragoal --low           # your effort wins over the route and the default
+goat --no-goat-defaults              # no model, no effort, argv forwarded untouched
+```
+
+Per-project overrides live in `.goat/config.json`. A partial entry replaces only the fields it sets, so you can pin an effort without restating the model:
+
+```json
+{
+  "routes": {
+    "ultraqa": { "model": "gpt-5.6-sol", "effort": "low" },
+    "plan": { "effort": "xhigh" }
+  }
+}
+```
+
+If you are on a single-model plan, ignore `--for` entirely — every stage still works in one session, which is the default behaviour.
+
 ## Benchmark: Codex with and without codex-goat
 
 Two identical scratch projects, one clean and one after `goat setup --scope project`. Same prompts, same models, same effort. Every number is Codex's own `turn.completed` usage event via `codex exec --json` — nothing is estimated. **160 task samples plus 12 prefix samples**, `codex-cli 0.147.0`.

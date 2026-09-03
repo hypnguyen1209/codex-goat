@@ -15,6 +15,7 @@ ${color.bold("Launch flags")}
   --effort <level>                       same, explicit form
   --madmax                               codex --dangerously-bypass-approvals-and-sandbox
   --worktree[=<name>] | -w <name>        run inside a dedicated git worktree
+  --for <stage>                          launch the model that stage is routed to
   --no-goat-defaults                     forward argv to codex untouched
   --print-argv                           print the resolved codex command and exit
   --                                     everything after this goes to codex verbatim

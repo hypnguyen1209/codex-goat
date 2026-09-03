@@ -39,6 +39,7 @@ const VALUE_FLAGS = new Set([
   "artifact",
   "effort",
   "exit",
+  "for",
   "limit",
   "note",
   "objective",

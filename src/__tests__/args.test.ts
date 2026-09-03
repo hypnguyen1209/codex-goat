@@ -58,6 +58,7 @@ test("every flag the CLI reads by value is registered as a value flag", () => {
     [["exec", "--role", "reviewer", "prompt"], "role", "reviewer"],
     [["--effort", "xhigh"], "effort", "xhigh"],
     [["--worktree", "feat/x"], "worktree", "feat/x"],
+    [["--for", "plan"], "for", "plan"],
   ];
   for (const [argv, flag, expected] of cases) {
     const parsed = parseArgs(argv);

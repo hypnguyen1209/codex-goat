@@ -4,6 +4,8 @@ import { ensureDir } from "../core/fsx.js";
 import { GoatError, log } from "../core/log.js";
 import { findProjectRoot, goatPaths } from "../core/paths.js";
 import { runCapture, runInherit, which } from "../core/proc.js";
+import { routeFor } from "../state/routing.js";
+import { normalizeStageId, STAGE_IDS } from "../state/stages.js";
 import type { ParsedArgs } from "./args.js";
 import { flagBool, flagString } from "./args.js";
 
@@ -35,21 +37,41 @@ const CONSUMED = new Set([
   "no-goat-defaults",
   "print-argv",
   "effort",
+  "for",
 ]);
 
 /** Goat flags that swallow the following token (`--effort high`, `-w feat/x`). */
-const CONSUMED_WITH_VALUE = new Set(["effort", "worktree", "w"]);
+const CONSUMED_WITH_VALUE = new Set(["effort", "worktree", "w", "for"]);
 
 export function buildLaunchPlan(parsed: ParsedArgs, cwd: string = process.cwd()): LaunchPlan {
   const notes: string[] = [];
   const args: string[] = [];
 
-  const effort = resolveEffort(parsed);
+  // `--for <stage>` picks the model that stage is routed to. A session runs one model,
+  // so this is how a plan written by one model gets executed by another: the stages meet
+  // through `.goat/`, not inside a single conversation.
+  const requested = flagString(parsed.flags, "for");
+  const stage = requested ? normalizeStageId(requested) : null;
+  if (requested && !stage) {
+    throw new GoatError(`Unknown stage '${requested}' for --for.`, `Stages: ${STAGE_IDS.join(", ")}`);
+  }
+  const route = stage ? routeFor(stage, cwd) : {};
+
+  const effort = resolveEffort(parsed, route.effort);
   const useDefaults = !flagBool(parsed.flags, "no-goat-defaults");
 
   if (useDefaults) {
     args.push("-c", `model_reasoning_effort="${effort}"`);
     notes.push(`reasoning effort = ${effort}`);
+  }
+
+  // An explicit -m/--model always wins; routing only fills a gap the user left.
+  const explicitModel = parsed.raw.some((token) => token === "-m" || token === "--model" || token.startsWith("--model="));
+  if (stage && route.model && !explicitModel && useDefaults) {
+    args.push("-m", route.model);
+    notes.push(`$${stage} routed to ${route.model}`);
+  } else if (stage && explicitModel) {
+    notes.push(`$${stage}: keeping your explicit --model over the route`);
   }
 
   if (flagBool(parsed.flags, "madmax")) {
@@ -112,13 +134,18 @@ function isValue(token: string | undefined): boolean {
   return token !== undefined && !token.startsWith("-");
 }
 
-function resolveEffort(parsed: ParsedArgs): ReasoningEffort {
+/**
+ * Explicit flags beat the stage route, which beats the default. A user who types
+ * `--low` means it, even alongside `--for plan`.
+ */
+function resolveEffort(parsed: ParsedArgs, routed?: string): ReasoningEffort {
   const explicit = flagString(parsed.flags, "effort");
   if (explicit && isEffort(explicit)) return explicit;
   if (flagBool(parsed.flags, "xhigh")) return "xhigh";
   if (flagBool(parsed.flags, "high")) return "high";
   if (flagBool(parsed.flags, "medium")) return "medium";
   if (flagBool(parsed.flags, "low")) return "low";
+  if (routed && isEffort(routed)) return routed;
   // The default is deliberately `high`, not `xhigh`: strong without being needlessly slow.
   return "high";
 }

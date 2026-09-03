@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { color, log } from "../../core/log.js";
 import { bundledDir } from "../../core/paths.js";
+import { routeFor } from "../../state/routing.js";
 import { STAGE_IDS, STAGES } from "../../state/stages.js";
 import type { ParsedArgs } from "../args.js";
 
@@ -14,6 +15,8 @@ export function runSkills(parsed: ParsedArgs): number {
     log.out(`  ${spec.invocation.padEnd(14)} ${spec.summary}`);
     log.detail(`requires: ${spec.requires.length > 0 ? spec.requires.join(", ") : "nothing"}`);
     log.detail(`produces: ${spec.produces}`);
+    const route = routeFor(id);
+    if (route.model) log.detail(`goat --for ${id} -> ${route.model}${route.effort ? ` (${route.effort})` : ""}`);
   }
 
   const bundled = listBundledSkills();
