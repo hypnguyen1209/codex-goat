@@ -157,7 +157,16 @@ function checkHooks(cwd: string): Check {
     const registered = Object.values(parsed?.hooks ?? {}).some((groups) =>
       groups.some((group) => group.hooks?.some((hook) => hook.command?.includes(GOAT_HOOK_MARKER))),
     );
-    if (registered) return { name: "lifecycle hooks", level: "pass", detail: `registered in ${file}` };
+    if (registered) {
+      // Registration is not activation. Codex drops a hook whose handler is Untrusted
+      // (codex-rs/hooks/src/engine/discovery.rs), and `codex exec` has no trust prompt at
+      // all — so a green "registered" line was the most misleading output goat produced.
+      return {
+        name: "lifecycle hooks",
+        level: "warn",
+        detail: `registered in ${file} — Codex must still TRUST them before they run (approve the prompt on next launch, or /hooks)`,
+      };
+    }
   }
   return {
     name: "lifecycle hooks",
@@ -165,6 +174,18 @@ function checkHooks(cwd: string): Check {
     detail: "goat hooks not registered; session context and memory injection are off",
   };
 }
+
+// There is deliberately no "is the hook handler built" check here.
+//
+// It looks useful and is not: `dist/cli/goat.js` statically imports `commands/hook.js`,
+// which imports `hooks/handler.js`, so `goat doctor` cannot start at all when that file is
+// missing — the check could never fire. And in the case it was meant to catch, a plugin
+// installed without built code, it would inspect the npm install's `packageRoot()` rather
+// than the plugin cache copy that is actually broken, and report PASS.
+//
+// The real coverage is elsewhere: `scripts/verify-bundle.mjs` refuses to ship a manifest
+// whose install channel omits the handler, and `hooks/goat-hook.mjs` names the missing
+// module on stderr instead of silently emitting `{}`.
 
 function checkStateRoot(cwd: string): Check {
   const paths = goatPaths(cwd);

@@ -59,17 +59,29 @@ $ultraqa    --tests
 <details>
 <summary><strong>Install as a Codex plugin instead</strong></summary>
 
-The repository is also a valid Codex plugin (`.codex-plugin/plugin.json`), so the skills
-and hooks can be installed through Codex's own plugin system:
+The repository is also a valid Codex plugin (`.codex-plugin/plugin.json`), installable
+through Codex's own plugin system. These are shell commands, not slash commands — Codex's
+TUI has `/plugins` for browsing, but installing happens on the CLI:
 
-```text
-/plugin marketplace add https://github.com/hypnguyen1209/codex-goat
-/plugin install codex-goat
+```bash
+codex plugin marketplace add https://github.com/hypnguyen1209/codex-goat
+codex plugin add codex-goat@codex-goat
 ```
+
+The marketplace entry resolves to the **npm** package, because that is the only channel
+that carries built code: `dist/` is generated at publish time and is not committed, so a
+plugin installed straight from a git checkout would register three hooks that run, exit 0,
+and inject nothing.
 
 Plugin mode gives you the skills, the role cards, and the lifecycle hooks. It does **not**
 give you the `goat` CLI, which the skills use for state, contracts, and the evidence
-ledger. Install both, or use `goat setup` alone.
+ledger — without it, every evidence step in every skill is a no-op. Install both, or use
+`goat setup` alone.
+
+**Codex must trust a hook before it runs it.** A freshly registered hook is `Untrusted`
+and is skipped silently; approve it at the next launch prompt or via `/hooks`. Note that
+`codex exec` has no trust prompt, so hooks stay inert there until trust is granted
+interactively at least once.
 
 </details>
 
@@ -188,7 +200,7 @@ Three Codex lifecycle hooks, registered by `goat setup`:
 
 | Event | What it does |
 | --- | --- |
-| `SessionStart` | Injects the active objective, in-flight stages, unproven claims, and a memory digest |
+| `SessionStart` | Injects the active objective, in-flight stages, unproven claims, and a memory digest. Matches all four sources — `startup`, `resume`, `clear`, **`compact`** — so the state is re-injected after a compaction, which is exactly when the model has lost it |
 | `UserPromptSubmit` | When a prompt invokes a stage, attaches that stage's entry-contract report |
 | `Stop` | Records the turn's outcome into session memory |
 
@@ -251,7 +263,7 @@ npm run build            # TypeScript -> dist/
 npm run build:native     # optional Rust helper
 npm run build:bun        # optional single-file binary (bun build --compile)
 
-npm test                 # build + 81 unit tests + 77 bundle contract checks
+npm test                 # build + 84 unit tests + 81 bundle contract checks
 npm run test:native      # 18 Rust tests
 npm run verify           # lint + everything above
 ```
