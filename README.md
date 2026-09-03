@@ -436,6 +436,58 @@ flowchart LR
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
+## Model benchmark: gpt-5.6-sol vs gpt-5.6-luna
+
+Every number below comes from Codex itself. `codex exec --json` ends a turn with a `turn.completed` event carrying `usage`, so nothing here is estimated or tokenized by hand. The harness is committed as `scripts/bench-models.mjs` and the raw samples as `bench/*.json`, so you can recompute or disagree.
+
+```bash
+node scripts/bench-models.mjs --prefix --runs 4          # always-on prefix
+node scripts/bench-models.mjs --runs 3 --effort medium   # 5 tasks, both models
+node scripts/bench-models.mjs --render --effort medium   # re-render from saved samples
+```
+
+### What is reproducible: the always-on prefix
+
+The prefix is everything Codex sends before your prompt — system instructions, tool schemas, `AGENTS.md`, the skill catalog. You pay it on every turn. Measured with a prompt trivial enough to complete in a single model call, `codex-cli 0.147.0`, 4 runs each:
+
+| Model | n | prefix tokens | spread |
+| --- | --: | --: | --: |
+| `gpt-5.6-sol` | 4 | 26,223 | ±8 |
+| `gpt-5.6-luna` | 4 | 24,665 | ±9 |
+
+**`luna` starts every turn 1,558 tokens lighter — about 6%.** A ±8 spread across four runs is as stable as this gets, and it is the one number here worth acting on.
+
+For scale: codex-goat's entire always-on contribution is the ~612-token `AGENTS.md` block, roughly 2.4% of that prefix. The prefix is Codex's, not this project's.
+
+### What is NOT reproducible: which model is cheaper on real work
+
+Five tasks × 2 models × 3 runs at `--effort medium`, 30 samples, zero errors — and the result does not support a winner:
+
+| Model | n | median out+reasoning | within-model spread |
+| --- | --: | --: | --: |
+| `gpt-5.6-sol` | 15 | 777 | 219 – 1,734 (7.9×) |
+| `gpt-5.6-luna` | 15 | 749 | 259 – 1,258 (4.9×) |
+
+The medians differ by ~4%, while the same model varies **5–8× run to run on the same prompt**. Per task, the direction flips entirely:
+
+| Task | sol | luna | |
+| --- | --: | --: | --: |
+| `sql-index` | 796 | 307 | **−61%** |
+| `jwt-expiry` | 1,003 | 771 | −23% |
+| `flaky-test` | 1,438 | 1,104 | −23% |
+| `react-rerender` | 692 | 685 | −1% |
+| `api-versioning` | 478 | 813 | **+70%** |
+
+A benchmark that swings from −61% to +70% across five tasks at n=3 is underpowered, and reporting its median as "luna is 4% cheaper" would be the kind of number that survives a README and not a rerun. Resolving a difference that small against this variance needs far more samples than this cost.
+
+### Two methodology notes that changed the numbers
+
+**`input_tokens` is summed across every request in a turn, not per turn.** A question the model thinks twice about reports roughly double the prefix. That is why the task table above reports only output — the input column was bimodal at 26k/52k and measured turn complexity, not the model. The `--prefix` mode exists specifically to avoid this.
+
+**Without `--ephemeral`, runs inherit session history and memories from each other.** Identical prompts produced 25k / 51k / 94k input, a 3.8× spread. With it, repeated runs land within ~4 tokens. The harness always passes it; an earlier version did not, and its numbers measured the environment.
+
+Both were found by inspecting the raw samples rather than trusting a green run — the first pass of this benchmark produced a confident table that was mostly noise.
+
 ## What lives where
 
 ```text

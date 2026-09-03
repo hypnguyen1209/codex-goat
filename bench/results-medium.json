@@ -1,0 +1,462 @@
+{
+  "codexVersion": "codex-cli 0.147.0",
+  "effort": "medium",
+  "runs": 3,
+  "models": [
+    "gpt-5.6-sol",
+    "gpt-5.6-luna"
+  ],
+  "promptCount": 5,
+  "samples": [
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 1,
+      "usage": {
+        "input_tokens": 52758,
+        "cached_input_tokens": 52096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 472,
+        "reasoning_output_tokens": 146
+      },
+      "elapsedMs": 15198,
+      "replyChars": 1049
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 2,
+      "usage": {
+        "input_tokens": 52868,
+        "cached_input_tokens": 26112,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 562,
+        "reasoning_output_tokens": 196
+      },
+      "elapsedMs": 16718,
+      "replyChars": 877
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 3,
+      "usage": {
+        "input_tokens": 52774,
+        "cached_input_tokens": 36736,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 528,
+        "reasoning_output_tokens": 173
+      },
+      "elapsedMs": 16196,
+      "replyChars": 1034
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 1,
+      "usage": {
+        "input_tokens": 53056,
+        "cached_input_tokens": 52352,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 797,
+        "reasoning_output_tokens": 410
+      },
+      "elapsedMs": 313880,
+      "replyChars": 662
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 2,
+      "usage": {
+        "input_tokens": 52881,
+        "cached_input_tokens": 52096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 672,
+        "reasoning_output_tokens": 396
+      },
+      "elapsedMs": 17935,
+      "replyChars": 304
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 3,
+      "usage": {
+        "input_tokens": 52942,
+        "cached_input_tokens": 45312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 585,
+        "reasoning_output_tokens": 150
+      },
+      "elapsedMs": 17003,
+      "replyChars": 713
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 1,
+      "usage": {
+        "input_tokens": 52798,
+        "cached_input_tokens": 36736,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1200,
+        "reasoning_output_tokens": 534
+      },
+      "elapsedMs": 28990,
+      "replyChars": 2628
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 2,
+      "usage": {
+        "input_tokens": 52805,
+        "cached_input_tokens": 36736,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 835,
+        "reasoning_output_tokens": 110
+      },
+      "elapsedMs": 24134,
+      "replyChars": 2825
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 3,
+      "usage": {
+        "input_tokens": 52920,
+        "cached_input_tokens": 26112,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1217,
+        "reasoning_output_tokens": 417
+      },
+      "elapsedMs": 26173,
+      "replyChars": 2567
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 1,
+      "usage": {
+        "input_tokens": 52791,
+        "cached_input_tokens": 45312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 536,
+        "reasoning_output_tokens": 241
+      },
+      "elapsedMs": 18678,
+      "replyChars": 831
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 2,
+      "usage": {
+        "input_tokens": 52841,
+        "cached_input_tokens": 52096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 603,
+        "reasoning_output_tokens": 331
+      },
+      "elapsedMs": 17313,
+      "replyChars": 705
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 3,
+      "usage": {
+        "input_tokens": 52789,
+        "cached_input_tokens": 26112,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 474,
+        "reasoning_output_tokens": 203
+      },
+      "elapsedMs": 15346,
+      "replyChars": 747
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 1,
+      "usage": {
+        "input_tokens": 26247,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 177,
+        "reasoning_output_tokens": 42
+      },
+      "elapsedMs": 8408,
+      "replyChars": 647
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 2,
+      "usage": {
+        "input_tokens": 26240,
+        "cached_input_tokens": 25984,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 237,
+        "reasoning_output_tokens": 75
+      },
+      "elapsedMs": 8368,
+      "replyChars": 745
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 3,
+      "usage": {
+        "input_tokens": 52831,
+        "cached_input_tokens": 45312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 644,
+        "reasoning_output_tokens": 259
+      },
+      "elapsedMs": 17243,
+      "replyChars": 1119
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 1,
+      "usage": {
+        "input_tokens": 49781,
+        "cached_input_tokens": 24320,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 533,
+        "reasoning_output_tokens": 216
+      },
+      "elapsedMs": 15009,
+      "replyChars": 617
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 2,
+      "usage": {
+        "input_tokens": 49689,
+        "cached_input_tokens": 27136,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 488,
+        "reasoning_output_tokens": 136
+      },
+      "elapsedMs": 14377,
+      "replyChars": 833
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 3,
+      "usage": {
+        "input_tokens": 49802,
+        "cached_input_tokens": 24320,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 512,
+        "reasoning_output_tokens": 170
+      },
+      "elapsedMs": 22128,
+      "replyChars": 590
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24696,
+        "cached_input_tokens": 24320,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 202,
+        "reasoning_output_tokens": 58
+      },
+      "elapsedMs": 7657,
+      "replyChars": 563
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 2,
+      "usage": {
+        "input_tokens": 49743,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 677,
+        "reasoning_output_tokens": 484
+      },
+      "elapsedMs": 18989,
+      "replyChars": 378
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 3,
+      "usage": {
+        "input_tokens": 49672,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 583,
+        "reasoning_output_tokens": 310
+      },
+      "elapsedMs": 16518,
+      "replyChars": 719
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 1,
+      "usage": {
+        "input_tokens": 80455,
+        "cached_input_tokens": 51712,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 929,
+        "reasoning_output_tokens": 329
+      },
+      "elapsedMs": 23493,
+      "replyChars": 1720
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 2,
+      "usage": {
+        "input_tokens": 49748,
+        "cached_input_tokens": 27136,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 803,
+        "reasoning_output_tokens": 184
+      },
+      "elapsedMs": 18458,
+      "replyChars": 2145
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 3,
+      "usage": {
+        "input_tokens": 49819,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 791,
+        "reasoning_output_tokens": 275
+      },
+      "elapsedMs": 20317,
+      "replyChars": 1519
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24701,
+        "cached_input_tokens": 24320,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 194,
+        "reasoning_output_tokens": 65
+      },
+      "elapsedMs": 8630,
+      "replyChars": 614
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 2,
+      "usage": {
+        "input_tokens": 24699,
+        "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 253,
+        "reasoning_output_tokens": 84
+      },
+      "elapsedMs": 8402,
+      "replyChars": 722
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 3,
+      "usage": {
+        "input_tokens": 24703,
+        "cached_input_tokens": 8960,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 235,
+        "reasoning_output_tokens": 91
+      },
+      "elapsedMs": 8187,
+      "replyChars": 634
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 1,
+      "usage": {
+        "input_tokens": 49687,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 604,
+        "reasoning_output_tokens": 257
+      },
+      "elapsedMs": 16281,
+      "replyChars": 1122
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 2,
+      "usage": {
+        "input_tokens": 49664,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 600,
+        "reasoning_output_tokens": 265
+      },
+      "elapsedMs": 15777,
+      "replyChars": 1057
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 3,
+      "usage": {
+        "input_tokens": 49716,
+        "cached_input_tokens": 48640,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 503,
+        "reasoning_output_tokens": 210
+      },
+      "elapsedMs": 14040,
+      "replyChars": 681
+    }
+  ]
+}
