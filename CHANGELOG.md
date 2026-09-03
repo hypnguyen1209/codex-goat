@@ -4,6 +4,44 @@ All notable changes to codex-goat are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-09-03
+
+Five defects found by auditing codex-goat against the Codex CLI source, each confirmed
+against the running binary (`codex-cli 0.147.0`) or the Rust implementation before fixing.
+
+### Fixed
+
+- **The plugin install path shipped no code.** `git ls-files dist` returns 0, and
+  `hooks/goat-hook.mjs` imported `dist/hooks/handler.js` inside a bare `catch {}`. A plugin
+  installed from the marketplace's local or git source registered three hooks that ran,
+  exited 0, and injected nothing — permanently, and with no error anywhere. The marketplace
+  source is now npm, pinned to the exact version, because npm is the only channel that
+  carries built code. The catch now names the missing module on stderr while still exiting 0.
+- **`hooks.json` could be written in a shape Codex refuses to parse.** `HooksFile` forwarded
+  unknown top-level keys in the name of preserving foreign content, but Codex parses the
+  file with `deny_unknown_fields` and accepts only `description` and `hooks`. A preserved
+  `$schema` disables every hook in the file, the user's included. Unknown keys are now
+  dropped and named; the test that asserted the old behavior asserts the opposite.
+- **The SessionStart matcher missed compaction.** `SessionStartSource` has four variants,
+  and matchers are compared as an exact alternation list rather than a regex, so
+  `startup|resume|clear` never matched `compact`. The session digest was not re-injected
+  after a compaction — exactly when the model has just lost what it describes.
+- **The README documented two commands that do not exist.** `/plugin marketplace add` and
+  `/plugin install` are not Codex slash commands; installation is `codex plugin marketplace
+  add` / `codex plugin add`. The README also claimed plugin mode delivers working hooks, and
+  said nothing about hook trust.
+- **`defaultPrompt` declared four entries against a limit of three.** The fourth was
+  discarded with a warning no user sees.
+
+### Changed
+
+- `goat doctor` reports lifecycle hooks as WARN with the trust step named, instead of PASS
+  on marker presence. A registered hook is Untrusted until approved and is skipped
+  silently, and `codex exec` has no trust prompt at all.
+- Four new bundle checks, each verified to fail when its invariant is broken: every runtime
+  import in the hook script is carried by the declared install channel, the marketplace pins
+  the current version, and `defaultPrompt` fits Codex's limit.
+
 ## [0.1.1] — 2026-09-03
 
 Four defects found by reading five comparable projects (oh-my-codex, ECC, codegraph,
@@ -99,5 +137,6 @@ First release.
   optional Bun single-file build.
 - 66 unit tests, 74 bundle contract checks, 17 Rust tests.
 
+[0.1.2]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.2
 [0.1.1]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 {
   "name": "codex-goat",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A stronger default for OpenAI Codex CLI: better prompts, one consistent workflow, and runtime helpers. Codex stays the execution engine.",
   "type": "module",
   "main": "dist/index.js",
