@@ -30,6 +30,8 @@
   },
   "files": [
     "dist/",
+    "!dist/__tests__/",
+    "!dist/**/*.map",
     "scripts/",
     "skills/",
     "prompts/",
