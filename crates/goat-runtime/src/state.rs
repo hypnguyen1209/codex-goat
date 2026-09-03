@@ -122,12 +122,36 @@ pub fn recent_observations(start: &Path, limit: usize) -> Vec<Observation> {
         .collect()
 }
 
+/// The most recent DISTINCT observations, oldest first.
+///
+/// Mirrors `memoryDigest` in `src/state/memory.ts`. Agents repeat themselves: a measured
+/// mid-project session emitted eight byte-identical lines, 76% of the whole SessionStart
+/// injection saying one thing eight times. Duplicates are dropped oldest-first so the
+/// surviving copy keeps its most recent position, and `limit` counts distinct entries.
 pub fn memory_digest(start: &Path, limit: usize) -> Option<String> {
-    let recent = recent_observations(start, limit);
+    // Over-read: duplicates collapse and would otherwise shrink the digest below `limit`.
+    let recent = recent_observations(start, limit.saturating_mul(4));
     if recent.is_empty() {
         return None;
     }
-    let lines: Vec<String> = recent.iter().map(|o| format!("- [{}] {}", o.kind, o.text)).collect();
+
+    let mut seen = std::collections::HashSet::new();
+    let mut distinct: Vec<&Observation> = Vec::new();
+    for entry in recent.iter().rev() {
+        if !seen.insert(format!("{} {}", entry.kind, entry.text)) {
+            continue;
+        }
+        distinct.push(entry);
+        if distinct.len() == limit {
+            break;
+        }
+    }
+    if distinct.is_empty() {
+        return None;
+    }
+    distinct.reverse();
+
+    let lines: Vec<String> = distinct.iter().map(|o| format!("- [{}] {}", o.kind, o.text)).collect();
     Some(format!(
         "Recent session memory (most recent last):\n{}",
         lines.join("\n")

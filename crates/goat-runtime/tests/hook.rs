@@ -96,14 +96,24 @@ fn session_start_surfaces_objective_and_missing_evidence() {
 fn stop_records_the_last_assistant_message_as_memory() {
     let dir = sandbox("stop-memory");
     let outcome = handle(
-        &payload("Stop", &dir, r#","last_assistant_message":"I will fix src/a.ts now""#),
+        &payload(
+            "Stop",
+            &dir,
+            r#","last_assistant_message":"I will basically fix ./src/a.ts now""#,
+        ),
         "2026-01-01T00:00:00.000Z",
     );
     assert_eq!(outcome, HookOutcome::Handled("{}".to_string()));
 
     let memory = fs::read_to_string(dir.join(".goat").join("memory").join("observations.jsonl")).expect("memory file");
-    assert!(memory.contains("src/a.ts"), "path was damaged: {memory}");
-    assert!(!memory.to_lowercase().contains("i will"), "filler was kept: {memory}");
+    // The path keeps its leading space: a recorded command has to stay runnable.
+    assert!(memory.contains("fix ./src/a.ts"), "path was damaged: {memory}");
+    assert!(
+        !memory.to_lowercase().contains("basically"),
+        "adverbial filler kept: {memory}"
+    );
+    // "I will" survives on purpose — see FILLER in compress.rs.
+    assert!(memory.contains("I will"), "subject-verb opener was stripped: {memory}");
 }
 
 #[test]

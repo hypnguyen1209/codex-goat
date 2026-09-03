@@ -2,6 +2,22 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-09-03
+
+Prompted by an audit of [caveman](https://github.com/JuliusBrussee/caveman) for token savings. Almost none of caveman's techniques transfer — its structural compressors measure 0.0% on prose this short, and its terseness ruleset would cost more always-on tokens than it saves. The finding that mattered was that codex-goat's own compressor was buying ~4% and corrupting the record to get it.
+
+### Fixed
+
+- **The compressor changed what sentences asserted.** The filler list carried subject-verb openers and hedges, not just adverbials: `"let me know if you want X"` lost its verb and became `"know if you want X"`, `"I will let me down"` collapsed to `"down"`, and `"I think the fix works"` became the bare claim `"the fix works"` — turning a hedge into an assertion, which is the exact false confidence this project exists to prevent. The list now contains only adverbials that can be deleted in any position without changing meaning.
+- **Recorded commands came back unrunnable.** The punctuation repair deleted the space before any dot, so `"run ./scripts/ci.sh"` was stored as `"run./scripts/ci.sh"` and `"cd .."` as `"cd.."`. The gap now closes only where the punctuation actually ends a clause. An evidence ledger is worthless if the command it recorded cannot be replayed.
+- **Fenced blocks were flattened.** The final whitespace collapse ran over the joined string, reaching into protected spans, so recorded test output lost its line structure. Every transformation now happens inside an unprotected segment, and a ``` fence is matched before a single backtick.
+- **The digest repeated itself.** Observations were not deduplicated: a measured mid-project session emitted eight byte-identical lines, 76% of the whole SessionStart injection saying one thing eight times. Duplicates are now dropped oldest-first, and the limit counts distinct entries.
+
+### Changed
+
+- Narrowing the filler list roughly halves an already-small saving. That is the intended trade: measured compression was 4.2% on realistic assistant messages, and a mangled sentence in the model's context is worse than a slightly longer one.
+- Measured effect on a realistic mid-project session: the SessionStart injection went from ~512 to ~130 tokens, a 75% reduction — from deduplication, not from compressing harder.
+
 ## [0.1.2] — 2026-09-03
 
 Five defects found by auditing codex-goat against the Codex CLI source, each confirmed against the running binary (`codex-cli 0.147.0`) or the Rust implementation before fixing.
@@ -75,6 +91,7 @@ First release.
 - npm package with a `goat` binary; Codex plugin manifest at `.codex-plugin/plugin.json`; optional Bun single-file build.
 - 66 unit tests, 74 bundle contract checks, 17 Rust tests.
 
+[0.1.3]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.3
 [0.1.2]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.2
 [0.1.1]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.0

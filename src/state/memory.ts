@@ -19,33 +19,36 @@ export interface Observation {
 /**
  * Filler phrases removed from unprotected prose, matched case-insensitively.
  *
- * Kept byte-identical to `FILLER` in `crates/goat-runtime/src/compress.rs`. Both
- * implementations are checked against `crates/goat-runtime/tests/fixtures/compress.json`
- * so the native and Node hook paths cannot produce different memory.
+ * Every entry here is an adverbial that can be deleted in ANY position without changing
+ * what the sentence asserts. That restriction is the whole design, and v0.1.2 did not
+ * have it — the list also carried subject-verb openers and hedges, which measurably
+ * damaged meaning:
+ *
+ *   "let me know if you want X"  ->  "know if you want X"     (phrasal verb eaten)
+ *   "I will let me down"         ->  "down"                   (sentence destroyed)
+ *   "I think the fix works"      ->  "the fix works"          (hedge became an assertion)
+ *
+ * The last one is the worst: turning "I think" into a bare claim is exactly the kind of
+ * false confidence this project exists to prevent. Hedges carry epistemic status, and
+ * subject-verb openers carry agency and tense; neither is filler.
+ *
+ * Narrowing the list cuts the already-small saving (~4% measured) roughly in half. That
+ * is the correct trade: the digest is injected into the model's context, and a mangled
+ * sentence there is worse than a slightly longer one.
+ *
+ * Kept byte-identical to `FILLER` in `crates/goat-runtime/src/compress.rs`; the shared
+ * fixture proves the two agree.
  */
 export const FILLER = [
-  "i will ",
-  "i'll ",
-  "i am going to ",
-  "i can ",
-  "i could ",
-  "i would ",
-  "let me ",
-  "let's ",
-  "i think ",
-  "i believe ",
-  "it seems that ",
-  "it looks like ",
   "basically ",
   "essentially ",
   "actually ",
+  "obviously ",
+  "of course ",
   "please note that ",
   "it is worth noting that ",
   "as you can see ",
-  "of course ",
-  "obviously ",
   "in order to ",
-  "the reason why ",
 ] as const;
 
 function isTokenChar(ch: string): boolean {
@@ -82,8 +85,22 @@ function segment(input: string): Array<[boolean, string]> {
     const ch = chars[index] as string;
 
     if (ch === "`") {
+      // A ``` fence must be matched before a single backtick, or the opener is read as
+      // an empty inline span and the block's newlines fall through to the whitespace
+      // collapse — which flattened recorded test output onto one line.
+      const isFence = chars[index + 1] === "`" && chars[index + 2] === "`";
+      if (isFence) {
+        const rest = chars.slice(index + 3).join("");
+        const closeAt = rest.indexOf("```");
+        if (closeAt >= 0) {
+          flush();
+          segments.push([true, `\`\`\`${rest.slice(0, closeAt)}\`\`\``]);
+          index += 3 + closeAt + 3;
+          continue;
+        }
+      }
       const close = chars.indexOf("`", index + 1);
-      if (close > index) {
+      if (!isFence && close > index) {
         flush();
         segments.push([true, chars.slice(index, close + 1).join("")]);
         index = close + 1;
@@ -160,13 +177,27 @@ function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, " ");
 }
 
-/** Compress prose while leaving code, paths, URLs, filenames, and versions untouched. */
+/**
+ * Compress prose while leaving code, paths, URLs, filenames, and versions untouched.
+ *
+ * Every transformation happens INSIDE an unprotected segment. v0.1.2 collapsed whitespace
+ * over the joined string as a final pass, which reached into protected spans and flattened
+ * a recorded ``` block onto one line — so the segmentation guarantee was real for
+ * characters but not for layout, and test output lost its structure.
+ */
 export function compress(input: string): string {
-  const joined = segment(input)
-    .map(([protectedSpan, text]) => (protectedSpan ? text : collapseWhitespace(stripFiller(text))))
+  const out = segment(input)
+    .map(([protectedSpan, text]) => {
+      if (protectedSpan) return text;
+      // Close the gap before punctuation only where it ends a clause: followed by
+      // whitespace or end of segment. The unconditional form deleted the space in front
+      // of any leading dot, so a recorded command came back unrunnable —
+      // "run ./scripts/ci.sh" became "run./scripts/ci.sh". An evidence ledger is
+      // worthless if the command it recorded cannot be replayed.
+      return collapseWhitespace(stripFiller(text)).replace(/ (?=[.,;:!?](\s|$))/g, "");
+    })
     .join("");
-  // Repair spacing left behind by removed phrases.
-  return collapseWhitespace(joined.replace(/ (?=[.,;:!?])/g, "")).trim();
+  return out.trim();
 }
 
 /** `<private>...</private>` never reaches disk. */
@@ -204,9 +235,33 @@ export function recentObservations(limit = 12, cwd: string = process.cwd()): Obs
   );
 }
 
+/**
+ * The most recent distinct observations, oldest first.
+ *
+ * Deduplication matters more than it sounds: agents repeat themselves. A measured
+ * mid-project session emitted eight byte-identical lines, which was 76% of the whole
+ * SessionStart injection saying one thing eight times. Duplicates are dropped oldest-first
+ * so the surviving copy keeps its most recent position, and `limit` then counts distinct
+ * entries rather than raw rows — the digest carries more information for fewer tokens.
+ */
 export function memoryDigest(limit = 8, cwd: string = process.cwd()): string | null {
-  const recent = recentObservations(limit, cwd);
+  // Over-read, because duplicates collapse and would otherwise shrink the digest below
+  // `limit` distinct entries.
+  const recent = recentObservations(limit * 4, cwd);
   if (recent.length === 0) return null;
-  const lines = recent.map((entry) => `- [${entry.kind}] ${entry.text}`);
+
+  const seen = new Set<string>();
+  const distinct: Observation[] = [];
+  for (let index = recent.length - 1; index >= 0; index -= 1) {
+    const entry = recent[index] as Observation;
+    const key = `${entry.kind} ${entry.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    distinct.push(entry);
+    if (distinct.length === limit) break;
+  }
+  if (distinct.length === 0) return null;
+
+  const lines = distinct.reverse().map((entry) => `- [${entry.kind}] ${entry.text}`);
   return `Recent session memory (most recent last):\n${lines.join("\n")}`;
 }

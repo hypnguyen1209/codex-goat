@@ -9,29 +9,21 @@
 //! the two implementations cannot silently drift.
 
 /// Filler phrases removed from unprotected prose, matched case-insensitively.
+///
+/// Every entry is an adverbial deletable in ANY position without changing what the
+/// sentence asserts. v0.1.2 also carried subject-verb openers and hedges, which damaged
+/// meaning: "let me know ..." lost its verb, and "I think X" became a bare assertion of X.
+/// Hedges carry epistemic status; openers carry agency. Neither is filler.
 const FILLER: &[&str] = &[
-    "i will ",
-    "i'll ",
-    "i am going to ",
-    "i can ",
-    "i could ",
-    "i would ",
-    "let me ",
-    "let's ",
-    "i think ",
-    "i believe ",
-    "it seems that ",
-    "it looks like ",
     "basically ",
     "essentially ",
     "actually ",
+    "obviously ",
+    "of course ",
     "please note that ",
     "it is worth noting that ",
     "as you can see ",
-    "of course ",
-    "obviously ",
     "in order to ",
-    "the reason why ",
 ];
 
 /// True when the character can appear inside a protected span (path, filename, version).
@@ -53,14 +45,31 @@ fn segment(input: &str) -> Vec<(bool, String)> {
         let ch = chars[index];
 
         if ch == '`' {
-            if let Some(end) = chars[index + 1..].iter().position(|&c| c == '`') {
-                let close = index + 1 + end;
-                if !plain.is_empty() {
-                    segments.push((false, std::mem::take(&mut plain)));
+            // A ``` fence must be matched before a single backtick, or the opener reads as
+            // an empty inline span and the block's newlines fall through to the whitespace
+            // collapse — which flattened recorded test output onto one line.
+            let is_fence = chars.get(index + 1) == Some(&'`') && chars.get(index + 2) == Some(&'`');
+            if is_fence {
+                let rest: String = chars[index + 3..].iter().collect();
+                if let Some(close_at) = rest.find("```") {
+                    if !plain.is_empty() {
+                        segments.push((false, std::mem::take(&mut plain)));
+                    }
+                    segments.push((true, format!("```{}```", &rest[..close_at])));
+                    index += 3 + rest[..close_at].chars().count() + 3;
+                    continue;
                 }
-                segments.push((true, chars[index..=close].iter().collect()));
-                index = close + 1;
-                continue;
+            }
+            if !is_fence {
+                if let Some(end) = chars[index + 1..].iter().position(|&c| c == '`') {
+                    let close = index + 1 + end;
+                    if !plain.is_empty() {
+                        segments.push((false, std::mem::take(&mut plain)));
+                    }
+                    segments.push((true, chars[index..=close].iter().collect()));
+                    index = close + 1;
+                    continue;
+                }
             }
         }
 
@@ -174,32 +183,46 @@ fn collapse_whitespace(text: &str) -> String {
     out
 }
 
+/// Compress prose while leaving code, paths, URLs, filenames, and versions untouched.
+///
+/// Every transformation happens INSIDE an unprotected segment. v0.1.2 collapsed whitespace
+/// over the joined string as a final pass, which reached into protected spans and flattened
+/// a recorded ``` block onto one line.
 pub fn compress(input: &str) -> String {
-    let joined: String = segment(input)
+    let out: String = segment(input)
         .into_iter()
         .map(|(protected, text)| {
             if protected {
                 text
             } else {
-                collapse_whitespace(&strip_filler(&text))
+                repair_punctuation(&collapse_whitespace(&strip_filler(&text)))
             }
         })
         .collect();
+    out.trim().to_string()
+}
 
-    // Repair spacing left behind by removed phrases.
-    let mut out = String::with_capacity(joined.len());
-    let chars: Vec<char> = joined.chars().collect();
+/// Close the gap before punctuation only where it ends a clause — followed by whitespace
+/// or the end of the segment. The unconditional form deleted the space in front of any
+/// leading dot, so "run ./scripts/ci.sh" came back as "run./scripts/ci.sh".
+fn repair_punctuation(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
     for (index, &ch) in chars.iter().enumerate() {
         if ch == ' ' {
             if let Some(&next) = chars.get(index + 1) {
-                if matches!(next, '.' | ',' | ';' | ':' | '!' | '?') {
+                let ends_clause = match chars.get(index + 2) {
+                    None => true,
+                    Some(after) => after.is_whitespace(),
+                };
+                if matches!(next, '.' | ',' | ';' | ':' | '!' | '?') && ends_clause {
                     continue;
                 }
             }
         }
         out.push(ch);
     }
-    collapse_whitespace(&out).trim().to_string()
+    out
 }
 
 /// Remove `<private>...</private>` spans before anything is written to disk.
@@ -231,7 +254,32 @@ mod tests {
         assert!(output.contains("`useMemo`"), "code span lost: {output}");
         assert!(output.contains("src/app/page.tsx"), "path lost: {output}");
         assert!(output.contains("v1.2.3"), "version lost: {output}");
-        assert!(!output.to_lowercase().contains("i will"), "filler kept: {output}");
+        assert!(
+            !output.to_lowercase().contains("basically"),
+            "adverbial filler kept: {output}"
+        );
+        // "I will" is deliberately NOT stripped any more: subject-verb openers carry
+        // agency and tense, and removing them damaged meaning ("I will let me down" once
+        // compressed to "down").
+        assert!(output.contains("I will"), "subject-verb opener was stripped: {output}");
+    }
+
+    #[test]
+    fn does_not_damage_meaning() {
+        // Each of these was corrupted by the v0.1.2 filler list or its punctuation repair.
+        assert_eq!(compress("let me know if you want X"), "let me know if you want X");
+        assert_eq!(compress("I think the fix works"), "I think the fix works");
+        assert_eq!(compress("run ./scripts/ci.sh now"), "run ./scripts/ci.sh now");
+        assert_eq!(compress("cd .. then build"), "cd .. then build");
+    }
+
+    #[test]
+    fn preserves_layout_inside_a_fenced_block() {
+        let output = compress("output:\n```\nnpm test\nFAIL a.ts:12\n```\ndone");
+        assert!(
+            output.contains("```\nnpm test\nFAIL a.ts:12\n```"),
+            "fence flattened: {output}"
+        );
     }
 
     #[test]
