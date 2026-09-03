@@ -101,6 +101,74 @@ Plugin mode gives you the skills, the role cards, and the lifecycle hooks. It do
 
 </details>
 
+## Architecture
+
+Codex does the agent work. codex-goat sits on three seams around it — the process it launches, the skills Codex loads, and the lifecycle hooks Codex calls — and keeps durable state in `.goat/`. Nothing here intercepts a model call.
+
+```mermaid
+flowchart TB
+    user([You])
+
+    subgraph goat["codex-goat"]
+        cli["goat CLI<br/>launch · setup · doctor · status<br/>contract · state · ledger"]
+        assets["skills/ · prompts/<br/>templates/AGENTS.md"]
+        hook["hooks/goat-hook.mjs"]
+        state[("<b>.goat/</b><br/>state.json · ledger.jsonl<br/>plans · goals · reviews · qa · memory")]
+    end
+
+    subgraph codex["Codex CLI — the execution engine"]
+        proc["codex process"]
+        model{{"model turn"}}
+    end
+
+    user -->|"goat --madmax --xhigh"| cli
+    cli -->|"spawn, argv forwarded verbatim"| proc
+    cli -->|"goat setup writes"| assets
+    assets -->|".agents/skills · AGENTS.md · hooks.json"| proc
+    proc --> model
+    model -->|"SessionStart · UserPromptSubmit · Stop"| hook
+    hook -->|"additionalContext"| model
+    hook <--> state
+    cli <--> state
+
+    classDef ext fill:#f6f8fa,stroke:#57606a,color:#24292f
+    class codex,proc,model ext
+```
+
+The CLI and the hook are the only two things that run codex-goat code, and they meet only through `.goat/` — which is why a resumed session and `goat status` cannot disagree about what has been proven.
+
+### Hook dispatch
+
+Three events, one entry script, two implementations. The native binary is optional and handles only what it can answer without the stage table; anything else falls back to Node.
+
+```mermaid
+flowchart TB
+    ev["Codex fires a hook<br/>JSON on stdin"] --> mjs["goat-hook.mjs"]
+    mjs --> native{"goat-runtime<br/>binary present?"}
+
+    native -->|no| node["dist/hooks/handler.js"]
+    native -->|yes| rust["goat-runtime hook"]
+
+    rust --> which{"which event?"}
+    which -->|"SessionStart · Stop"| handled["handled natively<br/>exit 0"]
+    which -->|"UserPromptSubmit"| delegate["exit 3 — delegate"]
+    delegate --> node
+
+    handled --> out["stdout: hook response"]
+    node --> out
+    out --> codex["Codex merges additionalContext"]
+
+    fail["import fails"] -.->|"stderr note, exit 0"| empty["{}"]
+    node -.-> fail
+
+    classDef warn fill:#fff8c5,stroke:#9a6700,color:#24292f
+    class fail,empty warn
+```
+
+`UserPromptSubmit` is always Node's, because evaluating an entry contract needs the stage table — and that has one source of truth, in TypeScript. Duplicating it in Rust is the drift this split exists to avoid.
+
+Three rules hold on every path: never block, never throw, exit 0 with valid JSON. A failure degrades to `{}` **and says why on stderr**, because a hook that silently succeeds while doing nothing is worse than one that fails loudly.
+
 ## The idea: entry contracts, not a pipeline
 
 Most workflow layers give you a chain: clarify → plan → execute → review → QA. Real requests almost never start at the beginning. "Review my changes" has no plan. "Test this properly" has no objective. Forcing a chain makes the tool fight the user.
@@ -131,6 +199,56 @@ $ultragoal: ready
 
 `inline` means *the user's own message can satisfy this* — so the stage proceeds. Nothing is ever hard-blocked, and that is enforced by the type: `RequirementVerdict` is `satisfied | inline`, with no third case, and a bundle check fails if the union grows.
 
+```mermaid
+flowchart LR
+    req["a requirement<br/>e.g. changed-scope"] --> chk{"checkContract"}
+    chk -->|"prior artifact, or<br/>the working tree"| sat["satisfied"]
+    chk -->|"the user can just<br/>say it"| inl["inline"]
+    sat --> go["stage starts"]
+    inl --> go
+
+    miss["missing"]:::dead
+
+    classDef dead fill:#f6f8fa,stroke:#8c959f,color:#8c959f,stroke-dasharray: 4 3
+```
+
+There is no third arrow. `missing` is drawn greyed out because it does not exist in the type — v0.1.0 declared it, nothing ever produced it, and that made the readiness check a tautology and the invariant unenforceable. Deleting the case is what turned the rule into something the compiler holds.
+
+So the six stages are six independent entry points, not a chain. The dotted lines below are what each stage *typically* unblocks — suggestions the skills print, never gates:
+
+```mermaid
+flowchart LR
+    subgraph entry[" "]
+        direction TB
+        e1["your request"]
+    end
+
+    clarify["$clarify<br/><i>needs nothing</i>"]
+    plan["$plan<br/><i>an objective</i>"]
+    ultragoal["$ultragoal<br/><i>objective + approach</i>"]
+    team["$team<br/><i>2+ lanes</i>"]
+    review["$code-review<br/><i>a change</i>"]
+    qa["$ultraqa<br/><i>something runnable</i>"]
+
+    e1 --> clarify
+    e1 --> plan
+    e1 --> ultragoal
+    e1 --> team
+    e1 --> review
+    e1 --> qa
+
+    clarify -.-> plan
+    plan -.-> ultragoal
+    plan -.-> team
+    ultragoal -.-> review
+    team -.-> review
+    review -.-> qa
+
+    style entry fill:none,stroke:none
+```
+
+"Review my changes" enters at `$code-review` with no plan and no objective. "Test this properly" enters at `$ultraqa`. Neither has to manufacture input it does not need.
+
 ## Evidence: what makes "done" mean something
 
 Every stage records proof in an append-only ledger:
@@ -152,6 +270,28 @@ goat warn 1 stage(s) marked complete without evidence that backs the claim (show
 ```
 
 `goat status` exits non-zero when that happens, so CI can gate on it. This is the single rule that separates finished work from a confident claim about finished work, and every bundled skill enforces it.
+
+```mermaid
+flowchart TB
+    claim["a stage is marked complete"] --> gate{"isSubstantiveEvidence<br/>over its recorded commands"}
+
+    gate -->|"nothing recorded"| bad1["complete*<br/>no evidence recorded"]
+    gate -->|"every command exited non-zero"| bad2["complete*<br/>every recorded command failed"]
+    gate -->|"every command is true, echo, :"| bad3["complete*<br/>every recorded command is a no-op"]
+    gate -->|"at least one real command exited 0"| good["complete"]
+
+    bad1 --> fail["goat status exits 1"]
+    bad2 --> fail
+    bad3 --> fail
+    good --> pass["goat status exits 0"]
+
+    classDef ok fill:#dafbe1,stroke:#1a7f37,color:#24292f
+    classDef no fill:#ffebe9,stroke:#cf222e,color:#24292f
+    class good,pass ok
+    class bad1,bad2,bad3,fail no
+```
+
+The exit-code check is the load-bearing one: v0.1.0 stored `exitCode`, wrote it to the ledger, printed it — and never compared it, so `--exit 1 -- npm test` closed the gate. The no-op list is a lint against lazy proof, not a security control; `bash -c true` defeats it, and the code says so.
 
 ## Command surface
 
@@ -234,6 +374,68 @@ npm run build:native
 
 It is genuinely optional — `hooks/goat-hook.mjs` falls back to the TypeScript handler when the binary is absent, and `UserPromptSubmit` is always delegated to Node because the stage table has one source of truth in TypeScript. The one piece of logic both implementations share, the memory compressor, is pinned by a fixture that [both test suites read](./crates/goat-runtime/tests/fixtures/compress.json), so they cannot drift.
 
+## Project structure
+
+Five layers, strictly one-directional. The graph below is generated from the actual imports by `node scripts/module-graph.mjs`, not drawn from memory — edge labels are how many import statements cross that boundary.
+
+```mermaid
+flowchart TB
+    cli["<b>cli/</b> — 12 files<br/>argv · launch · setup · doctor<br/>status · contract · state · ledger"]
+    hooks["<b>hooks/</b> — 1 file<br/>the lifecycle handler"]
+    setup["<b>setup/</b> — 2 files<br/>AGENTS.md merge<br/>hooks.json merge"]
+    state["<b>state/</b> — 5 files<br/>stages · contract · store<br/>ledger · memory"]
+    core["<b>core/</b> — 4 files<br/>paths · atomic fs<br/>process · logging"]
+
+    cli -->|23| core
+    cli -->|12| state
+    cli -->|6| setup
+    cli -->|1| hooks
+    hooks -->|4| state
+    hooks -->|1| core
+    state -->|8| core
+
+    classDef top fill:#ddf4ff,stroke:#0969da,color:#24292f
+    classDef mid fill:#fff8c5,stroke:#9a6700,color:#24292f
+    classDef bot fill:#dafbe1,stroke:#1a7f37,color:#24292f
+    class cli top
+    class hooks,setup,state mid
+    class core bot
+```
+
+`core` imports nothing above it, `setup` imports nothing at all across layers — it is pure functions over data, which is why both merges are easy to test exhaustively. There are no cycles; the script reports them, so a future one fails visibly rather than quietly.
+
+Two entry points, and only two:
+
+| Entry point | Layer path | Runs when |
+| --- | --- | --- |
+| `dist/cli/goat.js` | `cli` → everything | you type `goat …` |
+| `hooks/goat-hook.mjs` | → `hooks` → `state` → `core` | Codex fires a lifecycle event |
+
+They share no process and communicate only through `.goat/`.
+
+```mermaid
+flowchart LR
+    subgraph repo["codex-goat repository"]
+        direction TB
+        src["<b>src/</b><br/>TypeScript → dist/"]
+        crates["<b>crates/goat-runtime/</b><br/>optional Rust helper"]
+        assets["<b>skills/ · prompts/</b><br/><b>templates/ · hooks/</b><br/>shipped as data"]
+        scripts["<b>scripts/</b><br/>build · verify-bundle<br/>module-graph · run-tests"]
+    end
+
+    src -->|tsc| dist["dist/"]
+    crates -->|cargo| bin["goat-runtime<br/>5 platforms"]
+    scripts -->|"81 contract checks"| assets
+    dist --> pkg(["npm: codex-goat"])
+    assets --> pkg
+    bin --> gh(["GitHub Release assets"])
+
+    classDef opt stroke-dasharray: 4 3
+    class crates,bin,gh opt
+```
+
+The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
+
 ## What lives where
 
 ```text
@@ -271,6 +473,41 @@ npm run verify           # lint + everything above
 The Bun binary embeds the code but not `skills/`, `prompts/`, `templates/`, or `hooks/`. Commands that read those — `setup`, `doctor`, `skills`, `exec --role` — need `GOAT_HOME=/path/to/codex-goat`. State and workflow commands work without it.
 
 `npm run test:contract` is the check that catches what unit tests cannot: a SKILL.md whose frontmatter Codex would reject, a declared stage with no skill, a role prompt missing from the `$goat-roles` index, or a hook registration pointing at a file the package does not ship.
+
+### Release pipeline
+
+Pushing a `v*` tag runs the whole thing. The ordering is the point: `npm publish` cannot be undone, so it happens only after everything that could still say no has finished.
+
+```mermaid
+flowchart LR
+    tag(["git push origin v0.1.3"]) --> check
+
+    subgraph check["check"]
+        direction TB
+        c1["lint · build<br/>84 unit · 81 contract"]
+        c2["tag == package.json<br/>== marketplace pin"]
+        c3["npm publish --dry-run"]
+        c1 --> c2 --> c3
+    end
+
+    check --> build
+
+    subgraph build["build-native — 5 targets"]
+        direction TB
+        b1["linux-x64 · linux-arm64"]
+        b2["darwin-x64 · darwin-arm64"]
+        b3["windows-x64"]
+    end
+
+    build --> publish["publish<br/>npm publish --provenance"]
+    publish --> release["release<br/>checksums.txt + GitHub Release"]
+    build --> release
+
+    classDef irreversible fill:#ffebe9,stroke:#cf222e,color:#24292f
+    class publish irreversible
+```
+
+An earlier version put `publish` before `build-native`. A cross-compile failure would then have left a published npm version with no matching release assets — and npm will not accept a republish of the same version, so there was no way back. CI cross-compiles the four non-host targets on every push to `main`, so a target that stops building fails there rather than mid-release.
 
 ```text
 codex-goat/
