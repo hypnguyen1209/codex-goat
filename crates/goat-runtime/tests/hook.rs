@@ -136,8 +136,10 @@ fn session_start_rejects_failing_and_no_op_evidence() {
     let dir = sandbox("weak-evidence");
     fs::write(
         dir.join(".goat").join("state").join("state.json"),
+        // All three are command-proof stages: a document stage is proven by its artifact,
+        // so a failing command there is not the case under test.
         r#"{"stages":{
-            "plan":{"status":"complete","evidence":[{"command":"npm test","exitCode":1,"at":"t"}]},
+            "ultragoal":{"status":"complete","evidence":[{"command":"npm test","exitCode":1,"at":"t"}]},
             "ultraqa":{"status":"complete","evidence":[{"command":"true","exitCode":0,"at":"t"}]},
             "team":{"status":"complete","evidence":[{"command":"npm run lint","exitCode":0,"at":"t"}]}
         }}"#,
@@ -158,5 +160,41 @@ fn session_start_rejects_failing_and_no_op_evidence() {
     assert!(
         response.contains("$team: complete, 1 evidence entr(ies)"),
         "a real passing command was not accepted: {response}"
+    );
+}
+
+/// The native path must classify proof exactly as `goat status` does, or a resumed
+/// session and the CLI disagree about which claims are backed.
+#[test]
+fn session_start_matches_the_proof_model() {
+    let dir = sandbox("proof-model");
+    fs::write(dir.join("plan.md"), "# plan").expect("write artifact");
+    fs::write(
+        dir.join(".goat").join("state").join("state.json"),
+        r#"{"stages":{
+            "plan":{"status":"complete","artifact":"plan.md","evidence":[]},
+            "clarify":{"status":"complete","artifact":".goat/plans/ghost.md","evidence":[]},
+            "ultragoal":{"status":"complete","artifact":"plan.md","evidence":[]}
+        }}"#,
+    )
+    .expect("write state");
+
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "t") else {
+        panic!("SessionStart must be handled natively");
+    };
+    // A document stage with its artifact on disk is proven, with no command at all.
+    assert!(
+        response.contains("$plan: complete, 0 evidence entr(ies)"),
+        "document stage was not accepted: {response}"
+    );
+    // A recorded artifact that was never written is never proof.
+    assert!(
+        response.contains("artifact recorded but missing on disk: .goat/plans/ghost.md"),
+        "ghost artifact accepted: {response}"
+    );
+    // An execution stage still needs a command, artifact or not.
+    assert!(
+        response.contains("$ultragoal: complete, UNPROVEN — no evidence recorded"),
+        "execution stage was accepted without a command: {response}"
     );
 }

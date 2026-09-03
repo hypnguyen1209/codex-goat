@@ -2,6 +2,7 @@ import { color, log } from "../../core/log.js";
 import { checkContract } from "../../state/contract.js";
 import { readLedger } from "../../state/ledger.js";
 import { STAGE_IDS, STAGES } from "../../state/stages.js";
+import { findProjectRoot } from "../../core/paths.js";
 import { readState, unprovenReason } from "../../state/store.js";
 
 /**
@@ -12,6 +13,7 @@ import { readState, unprovenReason } from "../../state/store.js";
  */
 export function runStatus(cwd: string = process.cwd()): number {
   const state = readState(cwd);
+  const root = findProjectRoot(cwd);
 
   log.out(color.bold("codex-goat status"));
   log.out(`objective: ${state.objective ?? color.dim("(none recorded)")}`);
@@ -24,7 +26,7 @@ export function runStatus(cwd: string = process.cwd()): number {
     const contract = checkContract(id, cwd);
     // Presence of evidence is not proof: a failing command or a shell no-op is recorded
     // just as happily as a real check.
-    const reason = stage.status === "complete" ? unprovenReason(stage) : null;
+    const reason = stage.status === "complete" ? unprovenReason(stage, id, root) : null;
 
     const badge =
       stage.status === "complete"

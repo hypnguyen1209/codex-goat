@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { readJson, writeJsonAtomic } from "../core/fsx.js";
 import { goatPaths } from "../core/paths.js";
 import type { StageId } from "./stages.js";
-import { STAGE_IDS } from "./stages.js";
+import { STAGE_IDS, STAGES } from "./stages.js";
 
 export const STATE_VERSION = 1;
 
@@ -51,11 +53,39 @@ export function isSubstantiveEvidence(ref: EvidenceRef): boolean {
   return !NO_OP_COMMANDS.has(firstToken);
 }
 
-/** Why a stage's evidence does not back its claim, or null when it does. */
-export function unprovenReason(stage: StageState): string | null {
-  if (stage.evidence.length === 0) return "no evidence recorded";
+/**
+ * Why a completed stage's claim is not backed, or null when it is.
+ *
+ * Two things can fail, and v0.1.4 checked neither correctly.
+ *
+ * First, a recorded artifact that is not on disk is not proof. `goat status` printed the
+ * path without ever opening it, so a stage could report `complete` against a file that was
+ * never written. That check now applies to every stage.
+ *
+ * Second, what counts as proof depends on the stage. `command` stages assert that
+ * behaviour works, so they need a recorded command that exited 0. `artifact` stages
+ * produce a document — there is no command that makes a plan true, and demanding one is
+ * why `$clarify`, `$plan` and `$code-review` reported `complete*` after a by-the-book run.
+ * A substantive command still counts for either kind; it is additional proof, not a
+ * different standard.
+ *
+ * `root` is the project root an artifact path is resolved against. Omitting it skips the
+ * existence check rather than guessing, so callers without a root degrade to the old,
+ * weaker behaviour instead of reporting a false failure.
+ */
+export function unprovenReason(stage: StageState, stageId?: StageId, root?: string): string | null {
+  if (stage.artifact && root && !existsSync(join(root, stage.artifact))) {
+    return `artifact recorded but missing on disk: ${stage.artifact}`;
+  }
+
   if (stage.evidence.some(isSubstantiveEvidence)) return null;
 
+  const proof = stageId ? STAGES[stageId].proof : "command";
+  if (proof === "artifact") {
+    return stage.artifact ? null : "no artifact recorded";
+  }
+
+  if (stage.evidence.length === 0) return "no evidence recorded";
   const failing = stage.evidence.filter((ref) => ref.exitCode !== 0);
   if (failing.length === stage.evidence.length) {
     const last = failing[failing.length - 1];

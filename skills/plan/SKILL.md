@@ -62,6 +62,15 @@ and do not produce a plan padded with assumptions.
      --summary "<what the plan delivers>"
    ```
 
+   The plan file **is** the proof for this stage — `goat status` opens the path you
+   recorded. Write the file before you close the stage; a path that is not on disk reports
+   `complete*` and exits non-zero. If you ran a check while planning (verifying a cited
+   path exists, say), record it too — a command is stronger proof than a document:
+
+   ```sh
+   goat ledger evidence --stage plan --exit <code> -- <the command you ran>
+   ```
+
 ## Quality bar
 
 Refuse to mark the plan complete unless all of these hold:

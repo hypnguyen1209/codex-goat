@@ -6,6 +6,7 @@ import { after, beforeEach, test } from "node:test";
 import { ensureDir } from "../core/fsx.js";
 import { goatPaths } from "../core/paths.js";
 import { appendLedger, readLedger } from "../state/ledger.js";
+import { STAGE_IDS, STAGES } from "../state/stages.js";
 import {
   clearState,
   type EvidenceRef,
@@ -148,4 +149,48 @@ test("an empty command is never proof", () => {
 test("a stage with no evidence reports why", () => {
   updateStage("clarify", { status: "complete" });
   assert.equal(unprovenReason(readState().stages.clarify), "no evidence recorded");
+});
+
+// Regression: three of six skills close with `state set --status complete` and no
+// evidence call, because there is no command that makes a plan true. v0.1.4 demanded one
+// anyway, so a by-the-book $plan run printed `complete*` and `goat status` exited 1 —
+// the project's own gate failing its own instructions.
+test("a document stage is proven by its artifact existing", () => {
+  const root = process.env.GOAT_ROOT as string;
+  writeFileSync(join(root, "plan.md"), "# plan", "utf8");
+  updateStage("plan", { status: "complete", artifact: "plan.md" });
+  assert.equal(unprovenReason(readState().stages.plan, "plan", root), null);
+});
+
+test("a document stage with no artifact at all is still unproven", () => {
+  updateStage("clarify", { status: "complete" });
+  assert.equal(unprovenReason(readState().stages.clarify, "clarify", process.env.GOAT_ROOT), "no artifact recorded");
+});
+
+// Regression: `goat status` printed the artifact path without ever opening it, so a stage
+// could report `complete` against a file that was never written.
+test("a recorded artifact that is not on disk is never proof", () => {
+  const root = process.env.GOAT_ROOT as string;
+  updateStage("code-review", {
+    status: "complete",
+    artifact: ".goat/reviews/ghost.md",
+    evidence: [{ command: "npm run lint", exitCode: 0, at: "t" }],
+  });
+  const reason = unprovenReason(readState().stages["code-review"], "code-review", root);
+  assert.match(reason ?? "", /artifact recorded but missing on disk/);
+});
+
+test("an execution stage still needs a command, artifact or not", () => {
+  const root = process.env.GOAT_ROOT as string;
+  writeFileSync(join(root, "goals.md"), "# goals", "utf8");
+  updateStage("ultragoal", { status: "complete", artifact: "goals.md" });
+  assert.equal(unprovenReason(readState().stages.ultragoal, "ultragoal", root), "no evidence recorded");
+  updateStage("ultragoal", { evidence: [{ command: "npm test", exitCode: 0, at: "t" }] });
+  assert.equal(unprovenReason(readState().stages.ultragoal, "ultragoal", root), null);
+});
+
+test("every stage declares how it is proven", () => {
+  for (const id of STAGE_IDS) {
+    assert.ok(["artifact", "command"].includes(STAGES[id].proof), `${id} has no proof kind`);
+  }
 });

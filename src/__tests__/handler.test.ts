@@ -109,9 +109,18 @@ test("UserPromptSubmit stays silent — and spawns no subprocess — for ordinar
   );
 });
 
-test("SessionStart reports why a completed stage is unproven", () => {
-  updateStage("plan", { status: "complete", evidence: [{ command: "true", exitCode: 0, at: "t" }] });
+// $ultragoal, not $plan: the no-op message belongs to stages proven by a command. A plan
+// is proven by its artifact, so a no-op there is not the interesting failure.
+test("SessionStart reports why a completed execution stage is unproven", () => {
+  updateStage("ultragoal", { status: "complete", evidence: [{ command: "true", exitCode: 0, at: "t" }] });
   const context =
     handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
   assert.match(context, /UNPROVEN — every recorded command is a shell no-op/);
+});
+
+test("SessionStart reports a document stage whose artifact was never written", () => {
+  updateStage("plan", { status: "complete", artifact: ".goat/plans/ghost.md" });
+  const context =
+    handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
+  assert.match(context, /UNPROVEN — artifact recorded but missing on disk/);
 });

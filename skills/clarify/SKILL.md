@@ -71,6 +71,11 @@ questions — the answers are better and there are fewer of them.
      --objective "<the now-clear objective>"
    ```
 
+   The requirements file **is** the proof for this stage — `goat status` opens the path you
+   recorded, and a path that is not on disk reports `complete*` and exits non-zero. Write
+   the file before you close the stage. $clarify runs no commands, so there is nothing else
+   to record; the artifact is the whole claim.
+
    Recording `--objective` is what lets `$plan`, `$ultragoal`, and `$team` start without
    re-asking. Check it landed with `goat contract plan`.
 

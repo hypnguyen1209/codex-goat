@@ -86,6 +86,15 @@ goat state set --stage code-review --status complete --artifact .goat/reviews/<s
   --summary "<n> findings across <scope>"
 ```
 
+The report file **is** the proof for this stage — `goat status` opens the path you
+recorded, and a path that is not on disk reports `complete*`. You also ran the project's
+linter (see [Out of scope](#out-of-scope)), so record that too; a command is stronger proof
+than a document:
+
+```sh
+goat ledger evidence --stage code-review --exit <code> -- <the linter you ran>
+```
+
 ### 6. Say so when it is clean
 
 "No findings that survived verification across correctness, security, performance, and

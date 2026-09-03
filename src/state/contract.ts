@@ -54,7 +54,9 @@ export function checkContract(stage: StageId, cwd: string = process.cwd()): Cont
           return { requirement, verdict: "satisfied", detail: `objective on record: ${truncate(state.objective)}` };
         }
         const clarify = state.stages.clarify;
-        if (clarify.status === "complete" && clarify.artifact) {
+        // The artifact must be on disk, not merely recorded. A stale path is not an
+        // objective, and reporting it as satisfied sends the stage off with nothing.
+        if (clarify.status === "complete" && clarify.artifact && existsSync(join(root, clarify.artifact))) {
           return { requirement, verdict: "satisfied", detail: `from $clarify artifact ${clarify.artifact}` };
         }
         return { requirement, verdict: "inline", detail: "state the objective in the invocation" };
@@ -89,7 +91,7 @@ export function checkContract(stage: StageId, cwd: string = process.cwd()): Cont
 
       case "parallel-lanes": {
         const plan = state.stages.plan;
-        if (plan.status === "complete" && plan.artifact) {
+        if (plan.status === "complete" && plan.artifact && existsSync(join(root, plan.artifact))) {
           return { requirement, verdict: "satisfied", detail: `derive lanes from ${plan.artifact}` };
         }
         return { requirement, verdict: "inline", detail: "describe 2+ independent lanes, or $team caps to one worker" };

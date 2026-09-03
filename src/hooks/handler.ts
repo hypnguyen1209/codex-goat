@@ -90,7 +90,7 @@ function sessionStartContext(cwd: string): string | null {
       const stage = state.stages[id];
       // Same predicate `goat status` uses, so a resumed session and the CLI never
       // disagree about which claims are actually backed.
-      const reason = unprovenReason(stage);
+      const reason = unprovenReason(stage, id, findProjectRoot(cwd));
       const proof = reason === null ? `${stage.evidence.length} evidence entr(ies)` : `UNPROVEN — ${reason}`;
       return `- ${STAGES[id].invocation}: complete, ${proof}`;
     });

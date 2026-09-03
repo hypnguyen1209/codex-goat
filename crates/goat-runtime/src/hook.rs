@@ -88,13 +88,35 @@ fn is_substantive(entry: &Json) -> bool {
 /// Why a completed stage's evidence does not back its claim, or `None` when it does.
 ///
 /// Mirrors `unprovenReason` in `src/state/store.ts`.
-fn unproven_reason(evidence: Option<&Vec<Json>>) -> Option<String> {
+fn unproven_reason(evidence: Option<&Vec<Json>>, proof: &str, artifact: &str, root: &Path) -> Option<String> {
+    // A recorded artifact that is not on disk is not proof, whatever the stage kind.
+    if !artifact.is_empty() && !root.join(artifact).exists() {
+        return Some(format!("artifact recorded but missing on disk: {artifact}"));
+    }
+
     let entries = match evidence {
         Some(entries) if !entries.is_empty() => entries,
-        _ => return Some("no evidence recorded".to_string()),
+        _ => {
+            return if proof == "artifact" {
+                if artifact.is_empty() {
+                    Some("no artifact recorded".to_string())
+                } else {
+                    None
+                }
+            } else {
+                Some("no evidence recorded".to_string())
+            };
+        }
     };
     if entries.iter().any(is_substantive) {
         return None;
+    }
+    if proof == "artifact" {
+        return if artifact.is_empty() {
+            Some("no artifact recorded".to_string())
+        } else {
+            None
+        };
     }
 
     let failing: Vec<&Json> = entries
@@ -119,14 +141,17 @@ fn unproven_reason(evidence: Option<&Vec<Json>>) -> Option<String> {
     Some("every recorded command is a shell no-op".to_string())
 }
 
-/// Stage ids, in the order `src/state/stages.ts` declares them.
-const STAGES: &[(&str, &str)] = &[
-    ("clarify", "$clarify"),
-    ("plan", "$plan"),
-    ("ultragoal", "$ultragoal"),
-    ("team", "$team"),
-    ("code-review", "$code-review"),
-    ("ultraqa", "$ultraqa"),
+/// Stage ids with their invocation and proof kind, mirroring `src/state/stages.ts`.
+///
+/// `"artifact"` stages produce a document and are proven by it existing; `"command"`
+/// stages assert behaviour works and need a recorded command that exited 0.
+const STAGES: &[(&str, &str, &str)] = &[
+    ("clarify", "$clarify", "artifact"),
+    ("plan", "$plan", "artifact"),
+    ("ultragoal", "$ultragoal", "command"),
+    ("team", "$team", "command"),
+    ("code-review", "$code-review", "artifact"),
+    ("ultraqa", "$ultraqa", "command"),
 ];
 
 fn session_start_context(cwd: &Path) -> Option<String> {
@@ -142,7 +167,8 @@ fn session_start_context(cwd: &Path) -> Option<String> {
         let mut in_flight: Vec<String> = Vec::new();
         let mut complete: Vec<String> = Vec::new();
 
-        for (id, invocation) in STAGES {
+        let root = state::find_project_root(cwd);
+        for (id, invocation, proof) in STAGES {
             let Some(stage) = doc.get("stages").and_then(|stages| stages.get(id)) else {
                 continue;
             };
@@ -160,7 +186,7 @@ fn session_start_context(cwd: &Path) -> Option<String> {
                     in_flight.push(format!("- {invocation}: {status}{suffix}"));
                 }
                 "complete" => {
-                    let proof = match unproven_reason(evidence) {
+                    let proof = match unproven_reason(evidence, proof, artifact, &root) {
                         None => format!("{} evidence entr(ies)", evidence.map(Vec::len).unwrap_or(0)),
                         Some(reason) => format!("UNPROVEN — {reason}"),
                     };

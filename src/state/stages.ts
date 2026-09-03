@@ -39,6 +39,15 @@ export interface StageSpec {
   readonly produces: string;
   /** Where the stage writes its durable artifact, relative to `.goat/`. */
   readonly artifactDir: string;
+  /**
+   * What backs a completion claim for this stage.
+   *
+   * `"command"` stages assert that behaviour works, so they need a recorded command that
+   * exited 0. `"artifact"` stages produce a document; the document existing on disk is
+   * the proof, because there is no command that makes a plan true. Both kinds still fail
+   * when a recorded artifact is missing — v0.1.4 accepted a path that was never written.
+   */
+  readonly proof: "artifact" | "command";
   /** Stages that most often precede this one — a suggestion, never a gate. */
   readonly commonlyAfter: readonly StageId[];
 }
@@ -52,6 +61,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: [],
     produces: "requirements artifact with open questions resolved and scope frozen",
     artifactDir: "plans",
+    proof: "artifact",
     commonlyAfter: [],
   },
   plan: {
@@ -62,6 +72,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: ["objective"],
     produces: "plan artifact under .goat/plans/",
     artifactDir: "plans",
+    proof: "artifact",
     commonlyAfter: ["clarify"],
   },
   ultragoal: {
@@ -72,6 +83,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: ["objective", "plan"],
     produces: "goal ledger under .goat/goals/ with per-checkpoint evidence",
     artifactDir: "goals",
+    proof: "command",
     commonlyAfter: ["plan", "clarify"],
   },
   team: {
@@ -82,6 +94,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: ["objective", "parallel-lanes"],
     produces: "lane assignments and merged evidence under .goat/goals/",
     artifactDir: "goals",
+    proof: "command",
     commonlyAfter: ["plan", "ultragoal"],
   },
   "code-review": {
@@ -92,6 +105,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: ["changed-scope"],
     produces: "review report under .goat/reviews/",
     artifactDir: "reviews",
+    proof: "artifact",
     commonlyAfter: [],
   },
   ultraqa: {
@@ -102,6 +116,7 @@ export const STAGES: Record<StageId, StageSpec> = {
     inlineSatisfiable: ["runnable"],
     produces: "QA report and scenario matrix under .goat/qa/",
     artifactDir: "qa",
+    proof: "command",
     commonlyAfter: ["ultragoal", "team", "code-review"],
   },
 };
