@@ -2,6 +2,20 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] — 2026-09-03
+
+### Added
+
+- **`goat --for <stage>` routes a stage to a model.** A Codex session runs one model, so a stage cannot switch models mid-conversation; what makes routing work is that `.goat/` is durable. `$plan` writes an artifact, the session ends, and a new session on a different model picks it up through the same entry contract — the split is across sessions, which is what the entry-contract design was for. `$clarify`, `$plan` and `$code-review` route to `gpt-5.6-sol`; `$ultragoal`, `$team` and `$ultraqa` route to `gpt-5.6-luna`.
+- **Per-project overrides in `.goat/config.json`.** A `routes` entry merges per field, so an effort can be pinned without restating the model. Explicit flags still win over both: `--for plan -m gpt-5.6-terra` keeps terra and says so in the launch notes.
+- `goat skills` prints the route for every stage, and `--print-argv` shows the resolved command before anything runs.
+
+The defaults rest on how Codex positions the models — `gpt-5.6-sol` is priority 0 and the default in its own catalog, and Codex routes its own approval review, memory extraction and guardian scoring to `gpt-5.6-luna` — plus the measurement in this repo that luna finished faster in all six model × effort cells with a 1,558-token lighter prefix. They do **not** rest on output quality, which nothing here grades; the README says so rather than implying the split is optimal.
+
+### Fixed
+
+- `--for` was absent from `VALUE_FLAGS` on the first pass, so it parsed as a boolean and silently injected no model — the same class of defect as the `--status` bug fixed in 0.1.1. It is now covered by the guard test that enumerates every flag the CLI reads by value.
+
 ## [0.1.3] — 2026-09-03
 
 Prompted by an audit of [caveman](https://github.com/JuliusBrussee/caveman) for token savings. Almost none of caveman's techniques transfer — its structural compressors measure 0.0% on prose this short, and its terseness ruleset would cost more always-on tokens than it saves. The finding that mattered was that codex-goat's own compressor was buying ~4% and corrupting the record to get it.
@@ -91,6 +105,7 @@ First release.
 - npm package with a `goat` binary; Codex plugin manifest at `.codex-plugin/plugin.json`; optional Bun single-file build.
 - 66 unit tests, 74 bundle contract checks, 17 Rust tests.
 
+[0.1.4]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.4
 [0.1.3]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.3
 [0.1.2]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.2
 [0.1.1]: https://github.com/hypnguyen1209/codex-goat/releases/tag/v0.1.1
