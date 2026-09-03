@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GOAT_HOOK_EVENTS, type HooksFile, installHooks, uninstallHooks } from "../setup/hooks-file.js";
+import {
+  GOAT_HOOK_EVENTS,
+  type HooksFile,
+  SESSION_START_MATCHER,
+  installHooks,
+  uninstallHooks,
+  unsupportedTopLevelKeys,
+} from "../setup/hooks-file.js";
 
 const COMMAND = 'node "/pkg/hooks/goat-hook.mjs"';
 
@@ -33,9 +40,9 @@ test("reinstalling does not duplicate goat entries", () => {
   assert.equal(goatEntries.length, 1);
 });
 
-test("SessionStart matches startup, resume, and clear", () => {
+test("SessionStart carries the full source list as its matcher", () => {
   const installed = installHooks(null, COMMAND);
-  assert.equal(installed.hooks?.SessionStart?.[0]?.matcher, "startup|resume|clear");
+  assert.equal(installed.hooks?.SessionStart?.[0]?.matcher, SESSION_START_MATCHER);
 });
 
 test("Stop carries a timeout so memory writes are not cut off", () => {
@@ -55,9 +62,37 @@ test("uninstall returns null when the file held nothing but goat hooks", () => {
   assert.equal(uninstallHooks(installHooks(null, COMMAND)), null);
 });
 
-test("uninstall preserves unrelated top-level keys", () => {
-  const withExtras: HooksFile = { ...installHooks(null, COMMAND), $schema: "https://example.com/schema.json" };
-  const removed = uninstallHooks(withExtras);
-  assert.equal(removed?.$schema, "https://example.com/schema.json");
-  assert.equal(removed?.hooks, undefined);
+test("the allowed top-level key survives install and uninstall", () => {
+  const described: HooksFile = { description: "my hooks", ...installHooks(null, COMMAND) };
+  assert.equal(installHooks(described, COMMAND).description, "my hooks");
+  assert.equal(uninstallHooks(described)?.description, "my hooks");
+});
+
+// Regression: HooksFile once had a `[key: string]: unknown` index signature and spread
+// unknown keys forward "to preserve foreign content". Codex parses hooks.json with
+// deny_unknown_fields, so a preserved `$schema` makes the file unparseable and disables
+// EVERY hook in it — the user's included. The old test asserted that behavior.
+test("an unknown top-level key is reported and not written back", () => {
+  const withSchema = { $schema: "https://example.com/s.json", ...installHooks(null, COMMAND) };
+  assert.deepEqual(unsupportedTopLevelKeys(withSchema), ["$schema"]);
+
+  const installed = installHooks(withSchema as HooksFile, COMMAND);
+  assert.ok(!("$schema" in installed), "an unknown key was forwarded into hooks.json");
+  assert.deepEqual(unsupportedTopLevelKeys(installed), []);
+  assert.deepEqual(unsupportedTopLevelKeys(uninstallHooks(installed) ?? {}), []);
+});
+
+test("a clean file reports no unsupported keys", () => {
+  assert.deepEqual(unsupportedTopLevelKeys(installHooks(null, COMMAND)), []);
+  assert.deepEqual(unsupportedTopLevelKeys({ description: "x", hooks: {} }), []);
+  assert.deepEqual(unsupportedTopLevelKeys(null), []);
+});
+
+// Regression: the matcher is an exact alternation list, not a regex. Omitting `compact`
+// meant the session digest was never re-injected after a compaction.
+test("SessionStart matches all four sources, including compact", () => {
+  const matcher = installHooks(null, COMMAND).hooks?.SessionStart?.[0]?.matcher ?? "";
+  for (const source of ["startup", "resume", "clear", "compact"]) {
+    assert.ok(matcher.split("|").includes(source), `${source} is not matched: ${matcher}`);
+  }
 });

@@ -13,7 +13,7 @@ import {
   userSkillsRoot,
 } from "../../core/paths.js";
 import { mergeAgentsSection } from "../../setup/agents-md.js";
-import { type HooksFile, installHooks } from "../../setup/hooks-file.js";
+import { type HooksFile, installHooks, unsupportedTopLevelKeys } from "../../setup/hooks-file.js";
 import type { ParsedArgs } from "../args.js";
 import { flagBool, flagString } from "../args.js";
 
@@ -124,6 +124,14 @@ function installHookRegistrations(targets: SetupTargets): void {
   }
   const command = `node "${script}"`;
   const existing = existsSync(targets.hooksFile) ? readJson<HooksFile | null>(targets.hooksFile, null) : null;
+
+  // Codex rejects the whole file if it carries an unknown top-level key, so those cannot
+  // be forwarded. Say exactly what was dropped rather than silently rewriting the file.
+  for (const key of unsupportedTopLevelKeys(existing)) {
+    log.warn(`removed unsupported top-level key '${key}' from ${targets.hooksFile}`);
+    log.detail("Codex parses hooks.json with deny_unknown_fields; keeping it would disable every hook in the file");
+  }
+
   mkdirSync(join(targets.hooksFile, ".."), { recursive: true });
   writeJsonAtomic(targets.hooksFile, installHooks(existing, command));
   log.ok(`hooks registered in ${targets.hooksFile}`);
