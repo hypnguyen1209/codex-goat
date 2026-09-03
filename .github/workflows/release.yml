@@ -16,6 +16,8 @@ jobs:
   # Everything that can say no runs before anything irreversible happens.
   check:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -55,6 +57,11 @@ jobs:
 
       - name: Dry run the publish
         run: npm publish --dry-run --access public
+
+      # Computed here, where setup-node has run, and consumed by build-native — which
+      # has a Rust toolchain but no declared Node, so it must not parse JSON itself.
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
   # npm publish is the one step in this workflow that cannot be undone, so it runs
   # after the checks pass AND after all five native binaries have built. Publishing
@@ -155,7 +162,11 @@ jobs:
       - name: Stage
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          # From package.json via the check job, not GITHUB_REF_NAME: on a
+          # workflow_dispatch the ref is a branch, which produced archives named
+          # goat-runtime-main-*. check already asserts the tag and package.json agree,
+          # so this is the same value on a real release and correct everywhere else.
+          VERSION="${{ needs.check.outputs.version }}"
           STAGE="goat-runtime-${VERSION}-${{ matrix.name }}"
           mkdir "${STAGE}"
           cp "target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}" "${STAGE}/"
