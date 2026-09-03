@@ -1,0 +1,21 @@
+{
+  "codexVersion": "codex-cli 0.147.0",
+  "effort": "low",
+  "label": "baseline",
+  "projectDir": "D:/codex-goat/bench/env-baseline",
+  "bypassHookTrust": false,
+  "runs": 1,
+  "models": [
+    "gpt-5.6-sol"
+  ],
+  "promptCount": 1,
+  "samples": [
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 1,
+      "error": "status 1 | Reading additional input from stdin...\n2026-09-03T04:27:27.875401Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: \"Bearer resource_metadata=\\\"https://mcp.slack.com/.well-known/oauth-protected-resource\\\"\" })\n2026-09-03T04:27:29.212908Z ERROR codex_api::endpoint::responses_websocket: failed to"
+    }
+  ]
+}

@@ -79,10 +79,19 @@ const args = parseArgs(process.argv.slice(2));
 const models = String(args.get("models") ?? "gpt-5.6-sol,gpt-5.6-luna").split(",");
 const runs = Number.parseInt(String(args.get("runs") ?? "2"), 10);
 const effort = String(args.get("effort") ?? "medium");
-const resultsFile = join(outDir, `results-${effort}.json`);
+const resultsFile = () => join(outDir, `results-${label}-${effort}.json`);
 
 // `--only <id>` runs a single prompt, so the harness can be smoke-tested for a couple of
 // calls instead of a full matrix.
+// The directory codex runs in. This is what selects baseline vs codex-goat: a project
+// with AGENTS.md, .agents/skills and .codex/hooks.json costs more prefix than one without.
+const projectDir = typeof args.get("project") === "string" ? String(args.get("project")) : outDir;
+const label = typeof args.get("label") === "string" ? String(args.get("label")) : "default";
+// codex exec has no hook-trust prompt, so goat's SessionStart injection is inert there
+// unless trust is bypassed. Without this the "with codex-goat" arm measures only the
+// AGENTS.md block and the skill catalog, not the hook.
+const bypassHookTrust = args.has("bypass-hook-trust");
+
 const only = typeof args.get("only") === "string" ? String(args.get("only")) : null;
 const selected = only ? PROMPTS.filter((p) => p.id === only) : PROMPTS;
 if (selected.length === 0) {
@@ -106,8 +115,9 @@ function runOnce(model, prompt) {
       "--skip-git-repo-check",
       "--sandbox",
       "read-only",
+      ...(bypassHookTrust ? ["--dangerously-bypass-hook-trust"] : []),
       "-C",
-      outDir,
+      projectDir,
       "-m",
       model,
       "-c",
@@ -186,7 +196,7 @@ function render(data) {
 }
 
 if (args.has("render")) {
-  const data = JSON.parse(readFileSync(resultsFile, "utf8"));
+  const data = JSON.parse(readFileSync(resultsFile(), "utf8"));
   console.log(render(data).table);
   process.exit(0);
 }
@@ -222,7 +232,7 @@ if (args.has("prefix")) {
   for (const r of rows) {
     console.log(`| \`${r.model}\` | ${r.n} | ${r.med.toLocaleString()} | ±${r.max - r.min} |`);
   }
-  writeFileSync(join(outDir, "results-prefix.json"), `${JSON.stringify({ effort, rows }, null, 2)}\n`);
+  writeFileSync(join(outDir, `results-prefix-${label}.json`), `${JSON.stringify({ effort, rows }, null, 2)}\n`);
   process.exit(0);
 }
 
@@ -262,12 +272,15 @@ const data = {
   // No timestamp: it would churn the file on every run and say nothing useful.
   codexVersion: spawnSync("codex", ["--version"], { encoding: "utf8" }).stdout?.trim() ?? "unknown",
   effort,
+  label,
+  projectDir,
+  bypassHookTrust,
   runs,
   models,
   promptCount: selected.length,
   samples,
 };
-writeFileSync(resultsFile, `${JSON.stringify(data, null, 2)}\n`);
+writeFileSync(resultsFile(), `${JSON.stringify(data, null, 2)}\n`);
 
 const { table } = render(data);
 console.log(`\n${table}`);

@@ -436,76 +436,74 @@ flowchart LR
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
-## Benchmark: reasoning effort costs more than model choice
+## Benchmark: what codex-goat costs
 
-Every number here comes from Codex itself. `codex exec --json` ends a turn with a `turn.completed` event carrying `usage`, so nothing is estimated or tokenized by hand. **90 samples**, 5 tasks × 2 models × 3 efforts × 3 runs, `codex-cli 0.147.0`, zero errors. The harness and every raw sample are committed, so you can recompute or disagree.
+The question that matters is what installing this costs you per turn. Measured directly: two identical scratch projects, one clean and one after `goat setup --scope project`, same prompt, same model, hooks trusted. Numbers come from Codex's own `turn.completed` usage event via `codex exec --json` — nothing is estimated.
+
+| Model | Codex alone | + codex-goat | cost | |
+| --- | --: | --: | --: | --: |
+| `gpt-5.6-sol` | 25,106 | 25,845 | **+739** | +2.9% |
+| `gpt-5.6-luna` | 23,550 | 24,286 | **+736** | +3.1% |
+
+**codex-goat adds about 737 tokens to every turn — roughly 3%.** The two models agree to within 3 tokens, which is what you would expect if the cost is the text codex-goat installs rather than anything model-specific. Spread across runs was ±1 to ±25 tokens.
+
+That 737 is the `AGENTS.md` operating-rules block plus the one-line description of each of the eight skills, which Codex keeps in its catalog at all times. Skill *bodies* are not in that number: Codex loads a skill body only when the skill is invoked, and they run 481–1,153 tokens each.
+
+<details>
+<summary><strong>What is and is not included</strong></summary>
+
+Measured with a trivial prompt against an empty `.goat/`, so the SessionStart hook had no objective, no in-flight stages and no memory to inject. On a real session it also contributes: a mid-project digest measured **~130 tokens** after deduplication (it was ~512 before the fix in 0.1.3).
+
+So the honest range is **~737 tokens on turn one, up to roughly ~870 mid-session**, against a Codex baseline of 23.5–25.1k. The floor is Codex's own prefix — system instructions, tool schemas, the built-in catalog — and codex-goat is a few percent on top of it.
+
+`codex exec` has no hook-trust prompt, so the "+ codex-goat" arm passes `--dangerously-bypass-hook-trust`. Without it the hooks are inert and the measurement would understate the cost.
+
+</details>
+
+### Effort costs more than anything codex-goat adds
+
+Same harness, 90 samples, 5 tasks × 2 models × 3 efforts × 3 runs, zero errors:
 
 <img src="bench/chart-effort.svg" alt="Median output plus reasoning tokens per turn, grouped by reasoning effort. Both models rise steeply from low to high while staying close to each other at every level." width="720">
 
-### Effort is the lever
-
-Median output + reasoning tokens per turn, 15 samples per cell:
-
-| Effort | `gpt-5.6-sol` | `gpt-5.6-luna` | vs low (sol) |
+| Effort | `gpt-5.6-sol` | `gpt-5.6-luna` | vs low |
 | --- | --: | --: | --: |
 | `low` | 652 | 515 | 1.00× |
 | `medium` | 777 | 749 | 1.19× |
-| `high` | 1,086 | 1,024 | 1.67× |
+| `high` | 1,086 | 1,024 | **1.67×** |
 
-The trend is monotonic in all six cells, and reasoning tokens alone nearly triple — sol 130 → 203 → 370, luna 116 → 210 → 348. **Going from `low` to `high` costs about two-thirds more output than switching models ever saved in this data.**
+The trend is monotonic in all six cells. Moving from `low` to `high` costs sol **+434 output tokens per turn** — more than half the entire install cost of codex-goat, paid again on every single turn.
 
-That matters here because `goat` injects `model_reasoning_effort` on every launch and defaults to `high`. If a task does not need deliberation, `goat --low` is the largest single saving available, and it is one flag:
+`goat` injects `model_reasoning_effort` on every launch and defaults to `high`, so this is the flag that actually moves your bill:
 
 ```bash
 goat --low          # routine edits, lookups, mechanical changes
 goat --xhigh        # the default is high; go up only when the work earns it
 ```
 
-### The always-on prefix
+### What this does NOT measure
 
-The prefix is everything Codex sends before your prompt — system instructions, tool schemas, `AGENTS.md`, the skill catalog — paid on every turn. Measured with a prompt trivial enough to finish in one model call, 4 runs each:
+Whether codex-goat changes *output* length. That needs the same two environments run across the task set, and the run was cut short when the Codex session expired mid-benchmark — so it is absent here rather than reported from partial data.
 
-| Model | n | prefix tokens | spread |
-| --- | --: | --: | --: |
-| `gpt-5.6-sol` | 4 | 26,223 | ±8 |
-| `gpt-5.6-luna` | 4 | 24,665 | ±9 |
-
-**`luna` starts every turn 1,558 tokens lighter, about 6%**, and it finished faster in all six cells (13.7–17.7s against sol's 16.1–19.7s). A ±8 spread over four runs is the most reliable measurement on this page.
-
-For scale: codex-goat's own always-on contribution is the ~612-token `AGENTS.md` block — **2.4% of that prefix**. The overhead is Codex's, not this project's.
-
-### What this benchmark does NOT show
-
-Which model uses fewer tokens on real work. At medium effort the medians differ by ~4%, but per task the direction reverses completely:
-
-| Task | sol | luna | difference |
-| --- | --: | --: | --: |
-| `sql-index` | 777 | 326 | −58% |
-| `flaky-test` | 1,634 | 1,066 | −35% |
-| `jwt-expiry` | 1,068 | 893 | −16% |
-| `react-rerender` | 701 | 682 | −3% |
-| `api-versioning` | 312 | 861 | **+176%** |
-
-The same model also varies 5–8× run to run on the same prompt. A spread from −58% to +176% at n=3 cannot support "model X is cheaper", and reporting the 4% median as a finding would produce a number that survives a README but not a rerun. The effort trend survives precisely because it is monotonic across all six cells and far larger than the noise.
+It also cannot say which model is cheaper on real work. At medium effort the medians differ by ~4%, but per task the direction reverses from −58% to +176% and the same model varies 5–8× run to run on the same prompt. That spread cannot support a winner at n=3.
 
 ### Two methodology notes that changed the numbers
 
-**`input_tokens` is summed across every request in a turn, not per turn.** A question the model thinks twice about reports roughly double the prefix, which is why the tables above report output only — the input column was bimodal at 26k/52k and measured turn complexity, not the model. The `--prefix` mode uses a single-call prompt for exactly this reason.
+**`input_tokens` is summed across every request in a turn, not per turn.** A question the model thinks twice about reports roughly double the prefix, which is why the prefix table uses a prompt trivial enough to finish in one call.
 
-**Without `--ephemeral`, runs inherit session history and memories from each other.** Identical prompts produced 25k / 51k / 94k input, a 3.8× spread. With it, repeated runs land within ~4 tokens. The harness always passes it; the first version of this benchmark did not, and its numbers measured the environment.
+**Without `--ephemeral`, runs inherit session history and memories from each other.** Identical prompts produced 25k / 51k / 94k input, a 3.8× spread. With it, repeated runs land within ~4 tokens.
 
-Both were found by reading the raw samples rather than trusting a green run.
+Both were found by reading raw samples rather than trusting a green run.
 
 ### Reproduce it
 
 ```bash
-node scripts/bench-models.mjs --prefix --runs 4            # prefix only, ~8 calls
-node scripts/bench-models.mjs --runs 3 --effort medium     # one effort, 30 calls
-node scripts/bench-report.mjs                              # re-render tables + chart
+node scripts/bench-models.mjs --prefix --runs 3 --project /path/to/clean-project --label baseline
+node scripts/bench-models.mjs --prefix --runs 3 --project /path/to/goat-project --label goat --bypass-hook-trust
+node scripts/bench-report.mjs
 ```
 
-Raw samples live in `bench/results-<effort>.json` — one row per call, with Codex's usage object verbatim.
-
+Raw samples are in `bench/results-*.json`, one row per call with Codex's usage object verbatim.
 
 ## What lives where
 

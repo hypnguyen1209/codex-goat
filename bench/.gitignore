@@ -1,0 +1,4 @@
+# Scratch projects the harness runs codex in. Recreated by the reproduce commands in the
+# README; committing them would ship a second AGENTS.md and skills tree into the package.
+env-baseline/
+env-goat/
