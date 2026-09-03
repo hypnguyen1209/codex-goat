@@ -1,0 +1,68 @@
+name: Release
+
+# Publishing is triggered by pushing a version tag, so the thing on npm always
+# corresponds to a tagged commit rather than to whatever was on someone's laptop.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Pack and validate without publishing"
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance: npm verifies the package was built by this
+      # workflow from this commit, which a local `npm publish` cannot attest to.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # Never publish something the full suite has not passed. `npm publish` runs
+      # prepack (build) on its own, but it does not run the tests.
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:unit
+      - run: npm run test:contract
+
+      - name: Refuse to publish if the tag and package.json disagree
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag v$tag does not match package.json $pkg" >&2
+            exit 1
+          fi
+          # The marketplace manifest pins the npm version; a stale pin would install
+          # an old plugin. verify-bundle already checks this, but a release is the
+          # moment it actually matters.
+          mkt="$(node -p "require('./.agents/plugins/marketplace.json').plugins[0].source.version")"
+          if [ "$mkt" != "$pkg" ]; then
+            echo "marketplace pins $mkt, package is $pkg" >&2
+            exit 1
+          fi
+          echo "version $pkg agrees across tag, package.json, and marketplace"
+
+      - name: Publish
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm publish --dry-run --access public
