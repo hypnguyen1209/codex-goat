@@ -106,28 +106,39 @@ jobs:
           test -f .codex/hooks.json
           grep -q 'GOAT:AGENTS:START' AGENTS.md
 
+          # A recorded artifact must exist: `goat status` opens it. This script used to
+          # record a path it never wrote, which is exactly the defect the check now
+          # catches — the smoke test was itself an example of the bug.
+          mkdir -p .goat/plans && printf '# plan\n' > .goat/plans/p.md
+
           # The evidence gate has three holes worth guarding, all of them regressions we
           # actually shipped in v0.1.0. Each arm must FAIL the status gate.
-          node "$GOAT" state set --stage plan --status complete --artifact .goat/plans/p.md
+          # $ultragoal, not $plan: a plan is proven by its artifact, so the command-proof
+          # arms need a stage whose claim is about behaviour.
+          node "$GOAT" state set --stage ultragoal --status complete
           if node "$GOAT" status; then
             echo "FAIL: a completion with no evidence passed the gate" >&2
             exit 1
           fi
 
-          node "$GOAT" ledger evidence --stage plan --exit 1 -- npm test
+          node "$GOAT" ledger evidence --stage ultragoal --exit 1 -- npm test
           if node "$GOAT" status; then
             echo "FAIL: a command that exited 1 was accepted as proof" >&2
             exit 1
           fi
 
-          node "$GOAT" ledger evidence --stage plan --exit 0 -- true
+          node "$GOAT" ledger evidence --stage ultragoal --exit 0 -- true
           if node "$GOAT" status; then
             echo "FAIL: a shell no-op was accepted as proof" >&2
             exit 1
           fi
 
           # Only a real command that actually exited 0 closes the gate.
-          node "$GOAT" ledger evidence --stage plan --exit 0 -- npm run lint
+          node "$GOAT" ledger evidence --stage ultragoal --exit 0 -- npm run lint
+          node "$GOAT" status
+
+          # A document stage is proven by its artifact being on disk, with no command.
+          node "$GOAT" state set --stage plan --status complete --artifact .goat/plans/p.md
           node "$GOAT" status
 
           # A later `state set` must not erase the artifact an earlier call recorded.
