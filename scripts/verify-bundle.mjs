@@ -175,6 +175,18 @@ check(
   `marketplace pins ${source.version}, package is ${pkg.version}`,
 );
 
+// Cargo.lock records the workspace crate's own version. Bumping Cargo.toml without
+// refreshing the lock builds fine locally — plain `cargo build` rewrites it — and then
+// fails every `--locked` build, which is what CI and the release use. Catching it here
+// beats catching it after npm publish has already run.
+const cargoLock = readFileSync(join(root, "Cargo.lock"), "utf8");
+const lockedVersion = cargoLock.match(/name = "goat-runtime"\s*\nversion = "([^"]+)"/)?.[1];
+check(
+  "Cargo.lock matches Cargo.toml",
+  lockedVersion === pkg.version,
+  `Cargo.lock pins goat-runtime ${lockedVersion}, package is ${pkg.version} — run \`cargo update -p goat-runtime\``,
+);
+
 // The compiled-in constant is what a single-file binary reports; drift means `goat
 // version` lies for Bun users while staying correct for everyone else.
 const compiledVersion = readFileSync(join(root, "src", "version.ts"), "utf8").match(/VERSION = "([^"]+)"/);
