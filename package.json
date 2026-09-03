@@ -25,7 +25,8 @@
     "verify": "npm run lint && npm run test && npm run test:native",
     "setup": "node dist/cli/goat.js setup",
     "doctor": "node dist/cli/goat.js doctor",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "docs:unwrap": "node scripts/unwrap-markdown.mjs README.md CHANGELOG.md AGENTS.md"
   },
   "files": [
     "dist/",
