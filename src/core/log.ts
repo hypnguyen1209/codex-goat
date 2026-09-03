@@ -17,6 +17,15 @@ export const color = {
 
 const TAG = color.cyan("goat");
 
+// `goat status | head -3` closes the pipe while we are still writing, and an unhandled
+// EPIPE on stdout crashes the process with a stack trace. Piping into `head`, `grep -q`
+// or `less` is ordinary use; the reader going away is not our error to report.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+}
+
 export const log = {
   info(message: string): void {
     process.stderr.write(`${TAG} ${message}\n`);

@@ -62,6 +62,18 @@ for (const name of skillNames) {
     contents.includes("codex-goat"),
     "must mention codex-goat so setup/uninstall can identify ownership",
   );
+  // Codex gives the whole skill catalog one character budget and splits it across every
+  // installed skill, cutting each description by prefix at roughly budget/N. Measured on a
+  // 116-skill machine, that leaves 119 chars. Every description used to open with what the
+  // skill DOES and put "Use when ..." at the end, so all eight trigger clauses were cut off
+  // and the skills competed for routing on a truncated sentence fragment. Lead with the
+  // trigger; the description of the method survives on lighter installs.
+  // Measure a real install with: codex debug prompt-input > d.json && node scripts/catalog-probe.mjs d.json
+  check(
+    `skill ${name} trigger survives truncation`,
+    /Use (when|for)/.test((front.description ?? "").slice(0, 119)),
+    "no 'Use when/for' trigger in the first 119 chars; it will be truncated away on a busy install",
+  );
 }
 
 // --- stages have skills -----------------------------------------------------

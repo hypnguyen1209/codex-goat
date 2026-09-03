@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Produce an evidence-backed implementation plan with testable acceptance criteria. Use when work needs a written plan before code, when a request spans more than one file or subsystem, or when the user says plan, design the approach, or how should we do this. Part of codex-goat.
+description: Use when work needs a written plan before code, when a request spans more than one file or subsystem, or the user says plan, design the approach, or how should we do this. Produces an evidence-backed implementation plan with testable acceptance criteria. Part of codex-goat.
 ---
 
 # $plan

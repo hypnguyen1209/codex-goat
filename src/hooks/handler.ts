@@ -125,9 +125,14 @@ function userPromptContext(prompt: string, sessionId: string, cwd: string): stri
     `Produces: ${STAGES[stage].produces}`,
   ];
   if (report.suggestion) parts.push(report.suggestion);
-  parts.push(
-    "Stages are independent: satisfy any 'inline' requirement from the user's message and proceed. Do not force an earlier stage.",
-  );
+  // Only worth saying when there is an `inline` requirement to say it about. On $clarify,
+  // which has no prerequisites at all, it printed under "- no prerequisites" and named both
+  // a requirement category the stage cannot have and an earlier stage that does not exist.
+  if (report.checks.some((check) => check.verdict === "inline")) {
+    parts.push(
+      "Stages are independent: satisfy any 'inline' requirement from the user's message and proceed. Do not force an earlier stage.",
+    );
+  }
   return parts.join("\n");
 }
 

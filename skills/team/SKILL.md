@@ -1,6 +1,6 @@
 ---
 name: team
-description: Split work into independent parallel lanes, run them concurrently, and merge the results with per-lane evidence. Use when a task has 2 or more genuinely independent workstreams, or when the user says in parallel, split this up, or run these at the same time. Part of codex-goat.
+description: Use when a task has 2 or more genuinely independent workstreams, or the user says in parallel, split this up, or run these at the same time. Splits work into independent lanes, runs them concurrently, and merges the results with per-lane evidence. Part of codex-goat.
 ---
 
 # $team
@@ -94,10 +94,23 @@ report it at merge.
 
 ### 4. Close
 
+`complete` only when every lane merged and the whole-project verification exited 0. If any
+lane is still blocked, close `blocked` — this stage tells lanes to keep moving past a
+failure, so arriving here with one unresolved is an expected outcome, not an error:
+
 ```sh
+# every lane merged, full verification green
 goat state set --stage team --status complete --artifact .goat/goals/<slug>-team.md \
   --summary "<lanes merged, what shipped>"
+
+# any lane blocked, or the merged verification failed
+goat state set --stage team --status blocked --artifact .goat/goals/<slug>-team.md \
+  --summary "<which lanes landed, which did not, who owns the rest>"
 ```
+
+The merged verification command is this stage's proof, and the report file must be on disk
+at the path you record — `goat status` opens it, and a path that was never written reports
+`complete*`. Lane commands alone do not close the stage: they prove lanes, not the merge.
 
 ## Report contract
 

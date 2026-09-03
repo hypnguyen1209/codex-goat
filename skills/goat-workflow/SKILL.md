@@ -1,6 +1,6 @@
 ---
 name: goat-workflow
-description: Choose which codex-goat stage fits the current request and check whether it can start right now. Use when unsure whether to plan, execute, review, or QA, or when the user asks what should we do next. Part of codex-goat.
+description: Use when unsure whether to plan, execute, review, or QA, or the user asks what should we do next. Chooses which codex-goat stage fits the current request and checks whether it can start right now. Part of codex-goat.
 ---
 
 # $goat-workflow

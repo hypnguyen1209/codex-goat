@@ -2,6 +2,24 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+An optimization audit that mostly found correctness bugs. The headline measurement is that Codex gives the whole skill catalog one character budget and splits it across every installed skill, cutting each description by prefix — so what a description is worth depends on how many *other* skills the user has, which this repo cannot see from its own files.
+
+### Fixed
+
+- **Every skill's routing trigger was being truncated away.** Measured with `codex debug prompt-input` on a 116-skill machine: each codex-goat description is cut to 119–124 characters, and every one of them spent that window describing what the skill *does*, with `Use when …` at the end. Not one of the eight had an intact trigger clause; `$clarify` was cut mid-word at "the questions the codebase cannot answ". Descriptions now lead with the trigger and keep the method after it, so all eight survive the cut. Nothing was shortened — `$code-review` keeps the four dimensions and "adversarially verify" that distinguish it from other review skills in the same catalog. `scripts/catalog-probe.mjs` measures a real install, and a bundle check fails a description whose trigger falls outside the window.
+- **`$ultraqa`'s cleanup step deleted the file it then recorded as proof.** "Remove every temporary harness, fixture, log, spawned process, and state file the run created" covers `.goat/qa/<slug>.md`, so a QA run that did everything right reported `complete*` — and only a session later, through the SessionStart hook. Cleanup now exempts `.goat/`.
+- **`$ultraqa` and `$team` closed stopped and blocked runs as `complete`.** Both list mutually exclusive verdicts — `ULTRAQA STOPPED: max cycles`, a lane that stayed blocked — and then ran one unconditional `--status complete`. Because a single passing command satisfies the gate, a half-executed matrix rendered identically to a proven one. Both now close `blocked` unless the run actually finished.
+- **`AGENTS.md` stated only half the proof rule.** It said "a claim needs a command that ran" and enumerated `complete*` purely in command terms, but `$clarify`, `$plan` and `$code-review` are proven by their artifact. For half the workflow the always-on rules described a test that does not apply and invited the model to manufacture a command. The rule now states the split, including the missing-artifact case.
+- `goat status | head -3` crashed with an unhandled `EPIPE`. A reader closing the pipe is ordinary use, not an error to report.
+
+### Changed
+
+- The entry-contract report attaches its "stages are independent" note only when a requirement is actually `inline`. On `$clarify`, which has no prerequisites, it printed under "- no prerequisites" and named both a requirement category the stage cannot have and an earlier stage that does not exist.
+- `templates/AGENTS.md` drops the `.goat/` path table. Each skill already names the path it writes to, and no workflow rule lived in the table.
+- `$clarify`, `$plan` and `$code-review` pin `effort: "high"` in `DEFAULT_ROUTES`. That is already the default, so nothing changes today; it is written down so a future change to the global default cannot quietly lower the three stages whose whole output is a judgement. The execution stages were deliberately **not** dropped to `medium` despite a measured −275 generated tokens per turn: that benchmark contains no `$ultragoal`, `$team` or `$ultraqa` work, and the mechanism behind codex-goat's measured savings is the model answering in one pass instead of two, which no run records at any effort but medium.
+
 ## [0.1.4] — 2026-09-03
 
 ### Added

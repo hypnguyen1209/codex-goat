@@ -58,7 +58,6 @@ test("UserPromptSubmit attaches the entry contract for the invoked stage", () =>
   const context = output.hookSpecificOutput?.additionalContext ?? "";
   assert.match(context, /entry contract for \$ultraqa/);
   assert.match(context, /runnable:/);
-  assert.match(context, /Stages are independent/);
 });
 
 test("UserPromptSubmit stays quiet for a prompt that names no stage", () => {
@@ -116,6 +115,25 @@ test("SessionStart reports why a completed execution stage is unproven", () => {
   const context =
     handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
   assert.match(context, /UNPROVEN — every recorded command is a shell no-op/);
+});
+
+// The sentence explains what to do about an `inline` requirement. $clarify has no
+// requirements at all, so it used to print under "- no prerequisites", naming a category
+// the stage cannot have and an earlier stage that does not exist.
+test("the independence note is attached only when a requirement is actually inline", () => {
+  // $plan needs an objective and no state has been written, so it reports inline.
+  const withInline =
+    handleHook({ hook_event_name: "UserPromptSubmit", cwd: process.cwd(), prompt: "$plan the migration" })
+      .hookSpecificOutput?.additionalContext ?? "";
+  assert.match(withInline, /- objective: inline/);
+  assert.match(withInline, /Stages are independent/);
+
+  const noRequirements =
+    handleHook({ hook_event_name: "UserPromptSubmit", cwd: process.cwd(), prompt: "$clarify what do you mean" })
+      .hookSpecificOutput?.additionalContext ?? "";
+  assert.match(noRequirements, /entry contract for \$clarify/);
+  assert.match(noRequirements, /- no prerequisites/);
+  assert.doesNotMatch(noRequirements, /Stages are independent/);
 });
 
 test("SessionStart reports a document stage whose artifact was never written", () => {

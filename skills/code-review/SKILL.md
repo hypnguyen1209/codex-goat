@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review a concrete change across correctness, security, performance, and test coverage, then adversarially verify each finding before reporting it. Use when the user says review this, check my changes, look at this PR or diff, or before merging. Part of codex-goat.
+description: Use when the user says review this, check my changes, look at this PR or diff, or before merging. Reviews a concrete change across correctness, security, performance, and test coverage, then adversarially verifies each finding before reporting it. Part of codex-goat.
 ---
 
 # $code-review

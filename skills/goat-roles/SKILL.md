@@ -1,6 +1,6 @@
 ---
 name: goat-roles
-description: Specialist role cards (planner, executor, verifier, reviewer, security-reviewer, test-engineer, architect, critic, researcher) to adopt for focused sub-tasks. Use when a task needs one specific expert lens rather than a full workflow stage. Part of codex-goat.
+description: Use when a task needs one specific expert lens rather than a full workflow stage. Specialist role cards (planner, executor, verifier, reviewer, security-reviewer, test-engineer, architect, critic, researcher) to adopt for focused sub-tasks. Part of codex-goat.
 ---
 
 # $goat-roles

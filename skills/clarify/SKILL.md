@@ -1,6 +1,6 @@
 ---
 name: clarify
-description: Resolve an ambiguous request into frozen, execution-ready requirements by asking only the questions the codebase cannot answer. Use when a request is vague, could reasonably mean several different things, or when the user says help me think this through or I am not sure what I want yet. Part of codex-goat.
+description: Use when a request is vague, could mean several different things, or the user says help me think this through or I am not sure what I want yet. Resolves an ambiguous request into frozen, execution-ready requirements by asking only the questions the codebase cannot answer. Part of codex-goat.
 ---
 
 # $clarify

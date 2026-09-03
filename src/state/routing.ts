@@ -36,13 +36,29 @@ export interface StageRoute {
  * not a measured optimum.
  */
 export const DEFAULT_ROUTES: Readonly<Record<StageId, StageRoute>> = {
-  clarify: { model: "gpt-5.6-sol" },
-  plan: { model: "gpt-5.6-sol" },
-  "code-review": { model: "gpt-5.6-sol" },
+  clarify: { model: "gpt-5.6-sol", effort: "high" },
+  plan: { model: "gpt-5.6-sol", effort: "high" },
+  "code-review": { model: "gpt-5.6-sol", effort: "high" },
   ultragoal: { model: "gpt-5.6-luna" },
   team: { model: "gpt-5.6-luna" },
   ultraqa: { model: "gpt-5.6-luna" },
 };
+
+/**
+ * Why the three judgement stages pin `effort` and the three execution stages do not.
+ *
+ * `high` is what `goat` injects by default, so pinning it changes nothing today. It is
+ * written down because these three are the stages whose entire output is a judgement, and
+ * a future change to the global default must not quietly lower them.
+ *
+ * The execution stages are deliberately left unpinned rather than dropped to `medium`.
+ * Dropping them is worth a measured -275 generated tokens per turn at the benchmark
+ * medians, which is real money — but that benchmark is a generic task set containing no
+ * $ultragoal, $team or $ultraqa work, and the thing that makes codex-goat cheaper is the
+ * model answering in one pass instead of two. No run in bench/ records that one-call rate
+ * at any effort but medium. Lowering effort on the stages that do the work, on evidence
+ * that never observed them, is the trade this file already warns against.
+ */
 
 interface GoatConfig {
   routes?: Partial<Record<StageId, StageRoute>>;

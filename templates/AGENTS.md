@@ -5,17 +5,20 @@ the project's own conventions still govern how code is written.
 
 ### Evidence
 
-A claim needs a command that ran. "Done", "working", "fixed", and "verified" are claims.
+"Done", "working", "fixed", and "verified" are claims. Every claim needs proof, and what
+counts as proof depends on what the stage asserts.
 
-- Run the check. Record the exit code.
-- `goat ledger evidence --stage <stage> --exit <code> -- <command>`
-- If you could not run it, say so plainly and say why. An honest unverified result is
-  worth more than a confident false one.
-- `goat status` marks a stage `complete*` when its evidence does not back the claim: no
-  evidence recorded, every command exited non-zero, or every command is a shell no-op
-  (`true`, `echo`, `:`). That is unfinished work, not a formatting detail.
-- Recording `-- true` to satisfy the gate is not a shortcut, it is a false claim. If the
-  real check cannot run here, record nothing and say why.
+- `$ultragoal`, `$team`, `$ultraqa` assert that behavior works. Proof is a command that
+  ran and exited 0: `goat ledger evidence --stage <stage> --exit <code> -- <command>`
+- `$clarify`, `$plan`, `$code-review` produce a document. Proof is that document being on
+  disk at the path recorded with `--artifact`. There is no command that makes a plan true.
+- `goat status` marks a stage `complete*` when the proof does not back the claim: a
+  recorded artifact that is not on disk, or — for the three execution stages — no command,
+  every command non-zero, or every command a shell no-op (`true`, `echo`, `:`). That is
+  unfinished work, not a formatting detail.
+- If you could not run the check, say so and say why. An honest unverified result is worth
+  more than a confident false one. Recording `-- true` to satisfy the gate is not a
+  shortcut, it is a false claim.
 
 ### Stages are independent
 
@@ -45,16 +48,6 @@ Never delete or weaken a test to make a run pass.
 
 ### State
 
-Durable workflow state lives in `.goat/`:
-
-| Path | Contents |
-| --- | --- |
-| `.goat/state/state.json` | current stage status and recorded evidence |
-| `.goat/ledger.jsonl` | append-only record of claims and proof |
-| `.goat/plans/` | plans and frozen requirements |
-| `.goat/goals/` | goal ledgers and team lane assignments |
-| `.goat/reviews/` | review reports |
-| `.goat/qa/` | QA reports and scenario matrices |
-
-It survives compaction and restarts. After an interruption, run `goat status` and resume
-from the first unfinished item rather than restarting.
+Durable workflow state lives in `.goat/` and survives compaction and restarts. After an
+interruption, run `goat status` and resume from the first unfinished item rather than
+restarting. Each skill names the path it writes to; nothing here needs memorizing.

@@ -1,6 +1,6 @@
 ---
 name: ultraqa
-description: Adversarial end-to-end QA that runs the real thing against hostile scenarios, then fixes what breaks and cleans up. Use when behavior must be proven by execution rather than reading, before a release, or when the user says test this properly, QA it, or make sure it actually works. Part of codex-goat.
+description: Use when behavior must be proven by execution rather than reading, before a release, or the user says test this properly, QA it, or make sure it actually works. Adversarial end-to-end QA that runs the real thing against hostile scenarios, then fixes what breaks and cleans up. Part of codex-goat.
 ---
 
 # $ultraqa
@@ -92,6 +92,10 @@ Before finishing, remove every temporary harness, fixture, log, spawned process,
 file the run created. Confirm the worktree is in the state you found it, apart from
 intentional fixes. Report the cleanup explicitly.
 
+Keep the report under `.goat/qa/` and anything under `.goat/`. That report is this stage's
+proof — `goat status` opens the path you record, so deleting it as a temporary file turns a
+green run into `complete*`.
+
 ### 6. Report
 
 `# UltraQA Report` containing: goal and success criteria · the full scenario matrix ·
@@ -105,10 +109,23 @@ Close with exactly one of:
 - `ULTRAQA STOPPED: same failure 3 times`
 - `ULTRAQA BLOCKED: <reason>` — with the owner and the next safe step.
 
+Close the stage with the status that matches the verdict you just wrote. `complete` only
+for `ULTRAQA COMPLETE`; a stopped or blocked run is `blocked`, which `goat status` renders
+as unfinished:
+
 ```sh
+# ULTRAQA COMPLETE
 goat state set --stage ultraqa --status complete --artifact .goat/qa/<slug>.md \
   --summary "<scenarios run, failures found, fixes applied>"
+
+# ULTRAQA STOPPED or ULTRAQA BLOCKED
+goat state set --stage ultraqa --status blocked --artifact .goat/qa/<slug>.md \
+  --summary "<what is unproven and who owns the next step>"
 ```
+
+Writing `complete` for a stopped run is the failure this stage exists to prevent: the
+matrix is half-executed, and one passing baseline command is enough to make `goat status`
+report it green. Nobody reading it later can tell.
 
 Never write `ULTRAQA COMPLETE` without current evidence in the ledger for the baseline and
 every non-blocked scenario.

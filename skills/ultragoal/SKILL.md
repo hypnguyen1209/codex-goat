@@ -1,6 +1,6 @@
 ---
 name: ultragoal
-description: Execute an objective to completion as durable goals with checkpointed evidence, surviving compaction and session restarts. Use for multi-step implementation work, when a task must be finished across several turns, or when the user says execute this, ship it, finish the plan, or work until done. Part of codex-goat.
+description: Use for multi-step implementation work, when a task must be finished across several turns, or the user says execute this, ship it, finish the plan, or work until done. Executes an objective to completion as durable goals with checkpointed evidence, surviving compaction and session restarts. Part of codex-goat.
 ---
 
 # $ultragoal
