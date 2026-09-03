@@ -4,4 +4,4 @@
  *
  * `scripts/verify-bundle.mjs` fails the build if this drifts from `package.json`.
  */
-export const VERSION = "0.1.4";
+export const VERSION = "0.1.5";

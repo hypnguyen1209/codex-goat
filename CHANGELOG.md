@@ -2,7 +2,7 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.5] — 2026-09-03
 
 An optimization audit that mostly found correctness bugs. The headline measurement is that Codex gives the whole skill catalog one character budget and splits it across every installed skill, cutting each description by prefix — so what a description is worth depends on how many *other* skills the user has, which this repo cannot see from its own files.
 
