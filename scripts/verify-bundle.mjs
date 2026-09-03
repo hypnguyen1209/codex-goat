@@ -6,6 +6,7 @@
  * reject, a stage with no skill, a role prompt missing from the goat-roles index, or a
  * hook registration pointing at a file that is not in the package.
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,6 +120,60 @@ for (const entry of ["skills/", "prompts/", "templates/", "hooks/", "dist/"]) {
 
 const plugin = JSON.parse(readFileSync(join(root, ".codex-plugin", "plugin.json"), "utf8"));
 check("plugin version matches package", plugin.version === pkg.version, `${plugin.version} != ${pkg.version}`);
+
+// Codex drops everything past the third entry with a tracing::warn no user sees
+// (core-plugins/src/manifest.rs MAX_DEFAULT_PROMPT_COUNT = 3).
+const defaultPrompt = plugin.interface?.defaultPrompt ?? [];
+check(
+  "defaultPrompt fits Codex's limit",
+  defaultPrompt.length <= 3,
+  `${defaultPrompt.length} entries; Codex silently drops everything past 3`,
+);
+
+/**
+ * The defect this exists to prevent: `hooks/goat-hook.mjs` imports `dist/hooks/handler.js`
+ * at runtime, `dist/` is gitignored, and the import sits behind a catch that emits `{}`.
+ * A git- or path-sourced plugin install therefore registered three hooks that ran, exited
+ * 0, and injected nothing — with nothing anywhere reporting it.
+ *
+ * So: every runtime import the hook script makes must be shipped by whichever channel the
+ * marketplace manifest declares.
+ */
+const hookScript = readFileSync(join(root, "hooks", "goat-hook.mjs"), "utf8");
+const runtimeImports = [...hookScript.matchAll(/new URL\("([^"]+)"/g)].map((m) => m[1]);
+check("hook script has a runtime import to verify", runtimeImports.length > 0, "expected at least one dynamic import");
+
+const marketplace = JSON.parse(readFileSync(join(root, ".agents", "plugins", "marketplace.json"), "utf8"));
+const source = marketplace.plugins?.[0]?.source ?? {};
+
+for (const relative of runtimeImports) {
+  const resolved = relative.replace(/^\.\.\//, "");
+  const topLevel = `${resolved.split("/")[0]}/`;
+  if (source.source === "npm") {
+    // npm ships whatever `files` lists, built by prepack — git tracking is irrelevant.
+    check(
+      `hook import ${relative} is shipped by npm`,
+      pkg.files.includes(topLevel),
+      `${topLevel} is not in package.json "files", so the published tarball omits it`,
+    );
+  } else {
+    // Filesystem existence is the wrong question — dist/ exists on any machine that has
+    // run a build, which is why the original defect survived local testing. A local- or
+    // git-sourced install copies what git tracks, so that is what must be asserted.
+    const tracked = execFileSync("git", ["ls-files", "--", resolved], { cwd: root, encoding: "utf8" }).trim();
+    check(
+      `hook import ${relative} is tracked in git`,
+      tracked.length > 0,
+      `${resolved} is not committed, so a '${source.source}' install ships a hook that emits {} forever`,
+    );
+  }
+}
+
+check(
+  "marketplace pins the current version",
+  source.source !== "npm" || source.version === pkg.version,
+  `marketplace pins ${source.version}, package is ${pkg.version}`,
+);
 
 // The compiled-in constant is what a single-file binary reports; drift means `goat
 // version` lies for Bun users while staying correct for everyone else.

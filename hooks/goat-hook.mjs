@@ -62,11 +62,25 @@ async function main() {
   try {
     const handler = await import(new URL("../dist/hooks/handler.js", import.meta.url).href);
     process.stdout.write(handler.runHookFromStdin(raw));
-  } catch {
+  } catch (error) {
+    // Still exit 0 with valid JSON — a hook must never break the session. But say what
+    // happened: this used to be a bare `catch {}`, which turned "dist/ was never built"
+    // into a hook that succeeded and injected nothing, forever and undiagnosably.
+    note(`handler unavailable (${error?.message ?? error}); emitting empty output`);
     process.stdout.write("{}");
   }
 }
 
-main().catch(() => {
+/** Diagnostics go to stderr, which Codex surfaces without treating the hook as failed. */
+function note(message) {
+  try {
+    process.stderr.write(`goat-hook: ${message}\n`);
+  } catch {
+    // A closed stderr must not turn a degraded hook into a broken one.
+  }
+}
+
+main().catch((error) => {
+  note(`unexpected failure (${error?.message ?? error})`);
   process.stdout.write("{}");
 });

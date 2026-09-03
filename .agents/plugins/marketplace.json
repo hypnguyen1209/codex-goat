@@ -7,8 +7,9 @@
     {
       "name": "codex-goat",
       "source": {
-        "source": "local",
-        "path": "."
+        "source": "npm",
+        "package": "codex-goat",
+        "version": "0.1.1"
       },
       "policy": {
         "installation": "AVAILABLE"
