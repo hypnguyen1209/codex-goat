@@ -6,7 +6,11 @@
 
 Better prompts, one consistent workflow, and runtime helpers that make "done" auditable. Codex stays the execution engine.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![npm](https://img.shields.io/npm/v/codex-goat?color=cb3837&logo=npm)](https://www.npmjs.com/package/codex-goat) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org) [![CI](https://github.com/hypnguyen1209/codex-goat/actions/workflows/ci.yml/badge.svg)](https://github.com/hypnguyen1209/codex-goat/actions/workflows/ci.yml)
+
+```bash
+npm install -g codex-goat
+```
 
 </div>
 
@@ -21,8 +25,10 @@ codex-goat does not replace Codex, wrap its model calls, or fork its source. It 
 
 ## Install
 
+Requires Node 20+ and a Codex CLI that is already installed and authenticated — codex-goat drives `codex`, it does not replace it.
+
 ```bash
-codex --version                  # Codex CLI must already be installed and authenticated
+codex --version                  # must already work
 npm install -g codex-goat
 
 cd your-project
@@ -32,6 +38,35 @@ goat exec "Reply with exactly GOAT-OK"
 ```
 
 `goat doctor` checks the install shape. `goat exec` is the real smoke test — it forces Codex to authenticate and complete a model call. A green doctor with a failing exec means an auth or profile problem, not an install problem.
+
+<details>
+<summary><strong>Other ways to install</strong></summary>
+
+Without a global install, `npx` runs the same CLI. `goat setup` still writes to the project, so this is a real install path and not just a preview:
+
+```bash
+npx codex-goat setup --scope project
+npx codex-goat doctor
+```
+
+Upgrade, check, and remove:
+
+```bash
+npm install -g codex-goat@latest   # upgrade; re-run `goat setup` to refresh skills and hooks
+npm view codex-goat version        # what the registry has
+goat uninstall --scope project     # removes skills, AGENTS block, and hooks; keeps .goat/
+npm uninstall -g codex-goat
+```
+
+The package installs two identical binaries, `goat` and `codex-goat`. Use the second if something else on your `PATH` already answers to `goat`.
+
+Published from CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements), so the registry can attest which commit and workflow built the tarball you installed:
+
+```bash
+npm view codex-goat dist.attestations
+```
+
+</details>
 
 Then work normally:
 
