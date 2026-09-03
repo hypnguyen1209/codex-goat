@@ -436,33 +436,54 @@ flowchart LR
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
-## Benchmark: what codex-goat costs
+## Benchmark: Codex with and without codex-goat
 
-The question that matters is what installing this costs you per turn. Measured directly: two identical scratch projects, one clean and one after `goat setup --scope project`, same prompt, same model, hooks trusted. Numbers come from Codex's own `turn.completed` usage event via `codex exec --json` — nothing is estimated.
+Two identical scratch projects, one clean and one after `goat setup --scope project`. Same prompts, same models, same effort. Every number is Codex's own `turn.completed` usage event via `codex exec --json` — nothing is estimated. **160 task samples plus 12 prefix samples**, `codex-cli 0.147.0`.
 
-| Model | Codex alone | + codex-goat | cost | |
-| --- | --: | --: | --: | --: |
-| `gpt-5.6-sol` | 25,106 | 25,845 | **+739** | +2.9% |
-| `gpt-5.6-luna` | 23,550 | 24,286 | **+736** | +3.1% |
+| | Codex alone | + codex-goat | |
+| --- | --: | --: | --: |
+| Output + reasoning tokens per turn | 737 | **340** | **−54%** |
+| Answer length (chars) | 719 | **792** | **+10%** |
+| Seconds per turn | 15.6 | **9.8** | **−37%** |
+| Turns answered in one model call | 10% | **75%** | |
+| Always-on prefix (sol) | 25,106 | 25,845 | +739 |
 
-**codex-goat adds about 737 tokens to every turn — roughly 3%.** The two models agree to within 3 tokens, which is what you would expect if the cost is the text codex-goat installs rather than anything model-specific. Spread across runs was ±1 to ±25 tokens.
+**Half the generation tokens, a third less wall-clock, and slightly longer answers.** The saving does not come from terseness — it comes from the model finishing in one pass instead of two.
 
-That 737 is the `AGENTS.md` operating-rules block plus the one-line description of each of the eight skills, which Codex keeps in its catalog at all times. Skill *bodies* are not in that number: Codex loads a skill body only when the skill is invoked, and they run 481–1,153 tokens each.
+### Why it happens
 
-<details>
-<summary><strong>What is and is not included</strong></summary>
+Codex bills every request in a turn. Without project guidance the model frequently answers, reconsiders, and answers again: two `agent_message` items, two billed requests, one useful reply. With codex-goat installed that drops from 90% of turns to 25%.
 
-Measured with a trivial prompt against an empty `.goat/`, so the SessionStart hook had no objective, no in-flight stages and no memory to inject. On a real session it also contributes: a mid-project digest measured **~130 tokens** after deduplication (it was ~512 before the fix in 0.1.3).
+A generic `AGENTS.md` of similar size does **not** reproduce it — that control lands at 30% one-call turns and 817 tokens, slightly *worse* than no guidance at all. So this is not "having a project file"; it is what these particular operating rules tell the model about scope and stopping.
 
-So the honest range is **~737 tokens on turn one, up to roughly ~870 mid-session**, against a Codex baseline of 23.5–25.1k. The floor is Codex's own prefix — system instructions, tool schemas, the built-in catalog — and codex-goat is a few percent on top of it.
+### Per task, including where it does not work
 
-`codex exec` has no hook-trust prompt, so the "+ codex-goat" arm passes `--dangerously-bypass-hook-trust`. Without it the hooks are inert and the measurement would understate the cost.
+| Task | one-call rate | out+reasoning | answer chars |
+| --- | --: | --: | --: |
+| `react-rerender` | 0% → 100% | 711 → 325 | 783 → 676 |
+| `sql-index` | 13% → 100% | 734 → 264 | 606 → 686 |
+| `api-versioning` | 25% → 100% | 712 → 343 | 842 → 858 |
+| `jwt-expiry` | 13% → 75% | 993 → 331 | 559 → 575 |
+| `flaky-test` | 0% → 0% | 1,224 → 1,086 | 1,809 → 1,869 |
 
-</details>
+`flaky-test` is the honest counter-example: the most open-ended prompt in the set takes two calls in **both** arms, and the saving collapses to −11%. The effect is real where a question has one good answer, and largely absent where the model genuinely needs a second pass. `react-rerender` is the one case where the answer also got shorter, by 14%.
 
-### Effort costs more than anything codex-goat adds
+### The cost side
 
-Same harness, 90 samples, 5 tasks × 2 models × 3 efforts × 3 runs, zero errors:
+codex-goat adds **~737 tokens to the always-on prefix**, about 3% on top of Codex's own 23.5–25.1k. Measured on a single-call prompt against an empty `.goat/`:
+
+| Model | Codex alone | + codex-goat | cost |
+| --- | --: | --: | --: |
+| `gpt-5.6-sol` | 25,106 | 25,845 | +739 |
+| `gpt-5.6-luna` | 23,550 | 24,286 | +736 |
+
+That is the `AGENTS.md` block plus the one-line description of each of the eight skills. Skill bodies (481–1,153 tokens) load only on invocation. Mid-session the SessionStart digest adds roughly 130 tokens more.
+
+So the trade is a fixed ~737-token input surcharge against ~397 fewer generation tokens per turn, and generation is the expensive half.
+
+### Effort still moves more than either
+
+90 samples, 5 tasks × 2 models × 3 efforts × 3 runs:
 
 <img src="bench/chart-effort.svg" alt="Median output plus reasoning tokens per turn, grouped by reasoning effort. Both models rise steeply from low to high while staying close to each other at every level." width="720">
 
@@ -472,34 +493,28 @@ Same harness, 90 samples, 5 tasks × 2 models × 3 efforts × 3 runs, zero error
 | `medium` | 777 | 749 | 1.19× |
 | `high` | 1,086 | 1,024 | **1.67×** |
 
-The trend is monotonic in all six cells. Moving from `low` to `high` costs sol **+434 output tokens per turn** — more than half the entire install cost of codex-goat, paid again on every single turn.
+Monotonic in all six cells. `goat` sets `model_reasoning_effort` on every launch and defaults to `high`, so `goat --low` remains the single biggest lever available.
 
-`goat` injects `model_reasoning_effort` on every launch and defaults to `high`, so this is the flag that actually moves your bill:
+### How much to trust this
 
-```bash
-goat --low          # routine edits, lookups, mechanical changes
-goat --xhigh        # the default is high; go up only when the work earns it
-```
+The with/without result was **run twice, independently, and reproduced**: 25,880 / 359 tokens the first time, 25,879 / 341 the second, against a baseline re-run last in the sequence to rule out ordering. The generic-`AGENTS.md` control separates the effect from merely having a project file.
 
-### What this does NOT measure
-
-Whether codex-goat changes *output* length. That needs the same two environments run across the task set, and the run was cut short when the Codex session expired mid-benchmark — so it is absent here rather than reported from partial data.
-
-It also cannot say which model is cheaper on real work. At medium effort the medians differ by ~4%, but per task the direction reverses from −58% to +176% and the same model varies 5–8× run to run on the same prompt. That spread cannot support a winner at n=3.
+Two things it does **not** establish. Whether the answers are *better* — they are longer and take fewer passes, which is not the same as more correct, and nothing here grades content. And which model is cheaper: at medium effort the medians differ by ~4% while per-task direction reverses from −58% to +176%, so that comparison stays unresolved at this sample size.
 
 ### Two methodology notes that changed the numbers
 
-**`input_tokens` is summed across every request in a turn, not per turn.** A question the model thinks twice about reports roughly double the prefix, which is why the prefix table uses a prompt trivial enough to finish in one call.
+**`input_tokens` is summed across every request in a turn.** That is why the prefix table uses a prompt trivial enough to finish in one call, and why the task tables report generation rather than input — input there measures call count as much as content.
 
 **Without `--ephemeral`, runs inherit session history and memories from each other.** Identical prompts produced 25k / 51k / 94k input, a 3.8× spread. With it, repeated runs land within ~4 tokens.
 
-Both were found by reading raw samples rather than trusting a green run.
+`codex exec` has no hook-trust prompt, so the codex-goat arm passes `--dangerously-bypass-hook-trust`; without it the hooks are inert and the cost would be understated.
 
 ### Reproduce it
 
 ```bash
-node scripts/bench-models.mjs --prefix --runs 3 --project /path/to/clean-project --label baseline
-node scripts/bench-models.mjs --prefix --runs 3 --project /path/to/goat-project --label goat --bypass-hook-trust
+node scripts/bench-models.mjs --prefix --runs 3 --project /path/to/clean --label baseline
+node scripts/bench-models.mjs --runs 2 --effort medium --project /path/to/clean --label baseline
+node scripts/bench-models.mjs --runs 2 --effort medium --project /path/to/goat --label goat --bypass-hook-trust
 node scripts/bench-report.mjs
 ```
 

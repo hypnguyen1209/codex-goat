@@ -1,0 +1,335 @@
+{
+  "codexVersion": "codex-cli 0.147.0",
+  "effort": "medium",
+  "label": "goat2",
+  "projectDir": "D:/codex-goat/bench/env-goat",
+  "bypassHookTrust": true,
+  "runs": 2,
+  "models": [
+    "gpt-5.6-sol",
+    "gpt-5.6-luna"
+  ],
+  "promptCount": 5,
+  "samples": [
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 1,
+      "usage": {
+        "input_tokens": 25877,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 266,
+        "reasoning_output_tokens": 140
+      },
+      "elapsedMs": 9451,
+      "replyChars": 535,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 2,
+      "usage": {
+        "input_tokens": 25880,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 239,
+        "reasoning_output_tokens": 36
+      },
+      "elapsedMs": 9397,
+      "replyChars": 843,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 1,
+      "usage": {
+        "input_tokens": 52061,
+        "cached_input_tokens": 45056,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 471,
+        "reasoning_output_tokens": 211
+      },
+      "elapsedMs": 14188,
+      "replyChars": 588,
+      "messages": 2
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 2,
+      "usage": {
+        "input_tokens": 25871,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 193,
+        "reasoning_output_tokens": 69
+      },
+      "elapsedMs": 9081,
+      "replyChars": 489,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 1,
+      "usage": {
+        "input_tokens": 52101,
+        "cached_input_tokens": 36352,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 936,
+        "reasoning_output_tokens": 387
+      },
+      "elapsedMs": 21287,
+      "replyChars": 1869,
+      "messages": 2
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 2,
+      "usage": {
+        "input_tokens": 52073,
+        "cached_input_tokens": 19328,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 869,
+        "reasoning_output_tokens": 152
+      },
+      "elapsedMs": 20633,
+      "replyChars": 2739,
+      "messages": 2
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 1,
+      "usage": {
+        "input_tokens": 25878,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 176,
+        "reasoning_output_tokens": 32
+      },
+      "elapsedMs": 10939,
+      "replyChars": 601,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 2,
+      "usage": {
+        "input_tokens": 25882,
+        "cached_input_tokens": 19328,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 236,
+        "reasoning_output_tokens": 102
+      },
+      "elapsedMs": 8875,
+      "replyChars": 583,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 1,
+      "usage": {
+        "input_tokens": 25870,
+        "cached_input_tokens": 19328,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 260,
+        "reasoning_output_tokens": 83
+      },
+      "elapsedMs": 10848,
+      "replyChars": 836,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-sol",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 2,
+      "usage": {
+        "input_tokens": 25864,
+        "cached_input_tokens": 10624,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 301,
+        "reasoning_output_tokens": 89
+      },
+      "elapsedMs": 10420,
+      "replyChars": 1015,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24320,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 181,
+        "reasoning_output_tokens": 40
+      },
+      "elapsedMs": 8267,
+      "replyChars": 554,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "react-rerender",
+      "category": "debugging",
+      "run": 2,
+      "usage": {
+        "input_tokens": 24318,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 271,
+        "reasoning_output_tokens": 132
+      },
+      "elapsedMs": 9840,
+      "replyChars": 593,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24316,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 171,
+        "reasoning_output_tokens": 66
+      },
+      "elapsedMs": 8212,
+      "replyChars": 398,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "jwt-expiry",
+      "category": "bugfix",
+      "run": 2,
+      "usage": {
+        "input_tokens": 24314,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 239,
+        "reasoning_output_tokens": 92
+      },
+      "elapsedMs": 10289,
+      "replyChars": 595,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 1,
+      "usage": {
+        "input_tokens": 48948,
+        "cached_input_tokens": 46592,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 695,
+        "reasoning_output_tokens": 201
+      },
+      "elapsedMs": 17338,
+      "replyChars": 1928,
+      "messages": 2
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "flaky-test",
+      "category": "diagnosis",
+      "run": 2,
+      "usage": {
+        "input_tokens": 48925,
+        "cached_input_tokens": 46592,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 751,
+        "reasoning_output_tokens": 335
+      },
+      "elapsedMs": 17341,
+      "replyChars": 1538,
+      "messages": 2
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24324,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 154,
+        "reasoning_output_tokens": 0
+      },
+      "elapsedMs": 8473,
+      "replyChars": 686,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "sql-index",
+      "category": "performance",
+      "run": 2,
+      "usage": {
+        "input_tokens": 24324,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 238,
+        "reasoning_output_tokens": 111
+      },
+      "elapsedMs": 8887,
+      "replyChars": 588,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 1,
+      "usage": {
+        "input_tokens": 24308,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 290,
+        "reasoning_output_tokens": 118
+      },
+      "elapsedMs": 9544,
+      "replyChars": 840,
+      "messages": 1
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "prompt": "api-versioning",
+      "category": "design",
+      "run": 2,
+      "usage": {
+        "input_tokens": 24311,
+        "cached_input_tokens": 23296,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 218,
+        "reasoning_output_tokens": 23
+      },
+      "elapsedMs": 10864,
+      "replyChars": 975,
+      "messages": 1
+    }
+  ]
+}

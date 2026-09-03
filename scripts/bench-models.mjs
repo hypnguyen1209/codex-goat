@@ -145,6 +145,9 @@ function runOnce(model, prompt) {
 
   let usage = null;
   let text = "";
+  // How many agent_message items the turn emitted. A turn that answers, then answers
+  // again, bills for both — this is the number that explains the token difference.
+  let messages = 0;
   for (const line of (result.stdout ?? "").split("\n")) {
     if (!line.startsWith("{")) continue;
     let event;
@@ -154,10 +157,13 @@ function runOnce(model, prompt) {
       continue;
     }
     if (event.type === "turn.completed" && event.usage) usage = event.usage;
-    if (event.type === "item.completed" && event.item?.type === "agent_message") text = event.item.text ?? "";
+    if (event.type === "item.completed" && event.item?.type === "agent_message") {
+      messages += 1;
+      text = event.item.text ?? "";
+    }
   }
   if (!usage) return { error: "no turn.completed usage event", elapsedMs };
-  return { usage, elapsedMs, replyChars: text.length };
+  return { usage, elapsedMs, replyChars: text.length, messages };
 }
 
 function median(values) {
@@ -263,7 +269,7 @@ for (const model of models) {
       process.stderr.write(
         `in ${usage.input_tokens} out ${usage.output_tokens} reasoning ${usage.reasoning_output_tokens} (${Math.round(elapsedMs / 1000)}s)\n`,
       );
-      samples.push({ model, prompt: prompt.id, category: prompt.category, run, usage, elapsedMs, replyChars });
+      samples.push({ model, prompt: prompt.id, category: prompt.category, run, usage, elapsedMs, replyChars, messages: outcome.messages });
     }
   }
 }
