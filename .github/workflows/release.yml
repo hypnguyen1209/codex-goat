@@ -13,13 +13,9 @@ on:
         default: true
 
 jobs:
-  publish:
+  # Everything that can say no runs before anything irreversible happens.
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # Required for npm provenance: npm verifies the package was built by this
-      # workflow from this commit, which a local `npm publish` cannot attest to.
-      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -57,22 +53,40 @@ jobs:
           fi
           echo "version $pkg agrees across tag, package.json, and marketplace"
 
-      - name: Publish
-        if: github.event_name == 'push' || inputs.dry_run == false
-        run: npm publish --access public --provenance
+      - name: Dry run the publish
+        run: npm publish --dry-run --access public
+
+  # npm publish is the one step in this workflow that cannot be undone, so it runs
+  # after the checks pass AND after all five native binaries have built. Publishing
+  # first meant a cross-compile failure left a released npm version with no matching
+  # GitHub assets — a half-finished release with no way back.
+  publish:
+    needs: [check, build-native]
+    if: github.event_name == 'push' || inputs.dry_run == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance: npm attests the package was built by this
+      # workflow from this commit, which a local `npm publish` cannot claim.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Dry run
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: npm publish --dry-run --access public
 
   # The native helper is optional — hooks/goat-hook.mjs falls back to the Node handler
   # when it is absent. But building it required a Rust toolchain, so in practice nobody
   # had it and the fast path was theoretical. Prebuilt binaries make it a download.
   build-native:
     name: goat-runtime (${{ matrix.name }})
-    needs: publish
+    needs: check
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -178,7 +192,7 @@ jobs:
           path: ${{ env.ARCHIVE }}
 
   release:
-    needs: build-native
+    needs: [publish, build-native]
     runs-on: ubuntu-latest
     permissions:
       contents: write
