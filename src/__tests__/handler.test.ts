@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, test } from "node:test";
-import { ensureDir } from "../core/fsx.js";
+import { ensureDir, writeJsonAtomic } from "../core/fsx.js";
+import { goatPaths } from "../core/paths.js";
 import { detectStage, handleHook, runHookFromStdin } from "../hooks/handler.js";
+import { recentObservations } from "../state/memory.js";
 import { updateStage } from "../state/store.js";
 
 const sandbox = mkdtempSync(join(tmpdir(), "goat-hook-"));
@@ -141,4 +143,86 @@ test("SessionStart reports a document stage whose artifact was never written", (
   const context =
     handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
   assert.match(context, /UNPROVEN — artifact recorded but missing on disk/);
+});
+
+function sessionStart(): string {
+  return handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }).hookSpecificOutput?.additionalContext ?? "";
+}
+
+function writeConfig(memory: Record<string, unknown>): void {
+  writeJsonAtomic(goatPaths(process.env.GOAT_ROOT ?? process.cwd()).config, { version: 1, memory });
+}
+
+// `goat setup` has written memory.enabled / digestSize since 0.1.0; until 0.1.6 nothing read them.
+test("memory.enabled=false stops recording and injection in the same runtime", () => {
+  writeConfig({ enabled: false });
+  handleHook({ hook_event_name: "Stop", cwd: process.cwd(), last_assistant_message: "remember me" });
+  handleHook({ hook_event_name: "UserPromptSubmit", cwd: process.cwd(), prompt: "and me" });
+  assert.equal(recentObservations(10, process.cwd()).length, 0, "an observation was recorded with memory off");
+  assert.doesNotMatch(sessionStart(), /Recent session memory/);
+});
+
+test("digestSize bounds the digest", () => {
+  writeConfig({ enabled: true, digestSize: 2 });
+  for (const text of ["first thing", "second thing", "third thing"]) {
+    handleHook({ hook_event_name: "Stop", cwd: process.cwd(), last_assistant_message: text });
+  }
+  const context = sessionStart();
+  assert.doesNotMatch(context, /first thing/);
+  assert.match(context, /second thing/);
+  assert.match(context, /third thing/);
+});
+
+test("GOAT_MEMORY=off wins over the config file", () => {
+  writeConfig({ enabled: true });
+  process.env.GOAT_MEMORY = "off";
+  try {
+    handleHook({ hook_event_name: "Stop", cwd: process.cwd(), last_assistant_message: "silenced" });
+    assert.equal(recentObservations(10, process.cwd()).length, 0);
+  } finally {
+    delete process.env.GOAT_MEMORY;
+  }
+});
+
+// A stage still in flight carries its failures with it, so the three-failures rule in
+// AGENTS.md survives a restart instead of starting over at zero.
+test("SessionStart shows failing commands on an in-flight stage, and how old the state is", () => {
+  updateStage("ultragoal", {
+    status: "active",
+    evidence: [
+      { command: "npm test", exitCode: 1, at: "t" },
+      { command: "npm test", exitCode: 1, at: "t" },
+    ],
+  });
+  const context = sessionStart();
+  assert.match(context, /\$ultragoal: active — 2 failing command\(s\), last: npm test -> exit 1/);
+  assert.match(context, /Last codex-goat activity: moments ago \(/);
+  assert.doesNotMatch(context, /confirm it is still current/);
+});
+
+test("state older than a week asks for confirmation before resuming", () => {
+  updateStage("plan", { status: "active", objective: "old goal" });
+  const file = goatPaths(process.env.GOAT_ROOT ?? process.cwd()).stateFile;
+  const state = JSON.parse(readFileSync(file, "utf8"));
+  state.updatedAt = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  writeFileSync(file, JSON.stringify(state));
+  const context = sessionStart();
+  assert.match(context, /Last codex-goat activity: 14 days ago/);
+  assert.match(context, /confirm it is still current before resuming/);
+});
+
+test("no staleness line when nothing was rehydrated", () => {
+  assert.deepEqual(handleHook({ hook_event_name: "SessionStart", cwd: process.cwd() }), {});
+});
+
+// Codex spills any hook context over ~2,500 tokens to disk and injects a preview instead,
+// which would take the objective and stage list down with an oversized notes file.
+test("SESSION.md is capped under the spill limit and points at the file", () => {
+  // GOAT_ROOT stands in for `.goat/` itself, so the notes file lives directly under it.
+  const goat = goatPaths(process.env.GOAT_ROOT ?? process.cwd()).root;
+  ensureDir(goat);
+  writeFileSync(join(goat, "SESSION.md"), "x".repeat(6_000));
+  const context = sessionStart();
+  assert.ok(context.length < 5_000, `not capped: ${context.length} chars`);
+  assert.match(context, /truncated; read \.goat\/SESSION\.md for the rest/);
 });

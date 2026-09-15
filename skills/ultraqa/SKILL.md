@@ -48,6 +48,9 @@ Cover the normal path plus every hostile class that applies:
 6. **Hung commands** — every run gets a timeout; a killed child must recover cleanly.
 7. **Flaky tests** — re-run a capped number of times; a single lucky green is not a pass.
 8. **Misleading success** — success text with a non-zero exit, hidden skips, partial logs.
+9. **Borrowed environment** — a green run against a `node_modules`, virtualenv, or build
+   directory copied in from somewhere else proves nothing about this checkout. If the
+   install cannot run here, report the blocker; do not manufacture a passing baseline.
 
 Declare up front: success criteria, safety bounds, and the stop condition.
 

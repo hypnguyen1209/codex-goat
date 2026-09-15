@@ -14,7 +14,16 @@ import { flagBool, flagString } from "./args.js";
  * command line. A wrapper that quietly changes behavior is worse than no wrapper.
  */
 
-export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+/**
+ * Codex's `model_reasoning_effort` vocabulary (codex-rs/protocol/src/openai_models.rs),
+ * minus `none`, `persistent` and free-form custom values, which are not sensible defaults
+ * to type by hand. Not every model accepts every level — luna has no `ultra` — and that is
+ * Codex's error to raise, not goat's to pre-empt: until 0.1.6 `--effort max` was silently
+ * turned into `high`, which is the opposite of what a wrapper should do with an explicit
+ * instruction.
+ */
+export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface LaunchPlan {
   binary: string;
@@ -144,7 +153,10 @@ function isValue(token: string | undefined): boolean {
  */
 function resolveEffort(parsed: ParsedArgs, routed?: string): ReasoningEffort {
   const explicit = flagString(parsed.flags, "effort");
-  if (explicit && isEffort(explicit)) return explicit;
+  if (explicit !== undefined) {
+    if (isEffort(explicit)) return explicit;
+    throw new GoatError(`Unknown reasoning effort '${explicit}'.`, `Codex accepts: ${REASONING_EFFORTS.join(", ")}`);
+  }
   if (flagBool(parsed.flags, "xhigh")) return "xhigh";
   if (flagBool(parsed.flags, "high")) return "high";
   if (flagBool(parsed.flags, "medium")) return "medium";
@@ -155,7 +167,7 @@ function resolveEffort(parsed: ParsedArgs, routed?: string): ReasoningEffort {
 }
 
 function isEffort(value: string): value is ReasoningEffort {
-  return value === "low" || value === "medium" || value === "high" || value === "xhigh";
+  return (REASONING_EFFORTS as readonly string[]).includes(value);
 }
 
 export function codexBinary(): string {

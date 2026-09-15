@@ -43,7 +43,7 @@ produces confident nonsense.
 
 ### 3. Review each dimension
 
-Run all four. Skipping one silently is worse than reporting it as not applicable.
+Run all five. Skipping one silently is worse than reporting it as not applicable.
 
 | Dimension | Looking for |
 | --- | --- |
@@ -51,6 +51,7 @@ Run all four. Skipping one silently is worse than reporting it as not applicable
 | **Security** | Injection, path traversal, unvalidated input crossing a trust boundary, secrets in code or logs, authz gaps, unsafe deserialization |
 | **Performance** | N+1 queries, work inside loops that belongs outside, unbounded growth, blocking I/O on a hot path, missing pagination |
 | **Test coverage** | New behavior with no test, changed behavior with unchanged tests, tests asserting mocks instead of behavior, deleted assertions |
+| **Omission** | What the diff implies but does not contain: a mirrored implementation left unsynced (a second runtime, a generated copy), a doc row or changelog entry that now lies, a sibling script whose regex no longer matches, a caller of a changed signature. Refuting a finding catches false positives; this row is the only one that hunts false negatives |
 
 ### 4. Refute every finding before reporting it
 

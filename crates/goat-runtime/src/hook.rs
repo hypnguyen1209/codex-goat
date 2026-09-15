@@ -34,13 +34,13 @@ pub fn handle(raw: &str, now: &str) -> HookOutcome {
     let session_id = input.get("session_id").and_then(Json::as_str).unwrap_or("unknown");
 
     match event {
-        "SessionStart" => HookOutcome::Handled(match session_start_context(&cwd) {
+        "SessionStart" => HookOutcome::Handled(match session_start_context(&cwd, now) {
             Some(context) => additional_context("SessionStart", &context),
             None => "{}".to_string(),
         }),
         "Stop" => {
             if let Some(message) = input.get("last_assistant_message").and_then(Json::as_str) {
-                if !message.is_empty() {
+                if !message.is_empty() && state::memory_config(&cwd).enabled {
                     state::record_observation(&cwd, session_id, "result", message, now);
                 }
             }
@@ -89,9 +89,16 @@ fn is_substantive(entry: &Json) -> bool {
 ///
 /// Mirrors `unprovenReason` in `src/state/store.ts`.
 fn unproven_reason(evidence: Option<&Vec<Json>>, proof: &str, artifact: &str, root: &Path) -> Option<String> {
-    // A recorded artifact that is not on disk is not proof, whatever the stage kind.
-    if !artifact.is_empty() && !root.join(artifact).exists() {
-        return Some(format!("artifact recorded but missing on disk: {artifact}"));
+    // A recorded artifact that is not on disk is not proof, whatever the stage kind — and
+    // neither is an empty one. `: > plan.md` closed a stage green until 0.1.6.
+    if !artifact.is_empty() {
+        match std::fs::metadata(root.join(artifact)) {
+            Err(_) => return Some(format!("artifact recorded but missing on disk: {artifact}")),
+            Ok(meta) if meta.len() == 0 => {
+                return Some(format!("artifact recorded but empty on disk: {artifact}"))
+            }
+            Ok(_) => {}
+        }
     }
 
     let entries = match evidence {
@@ -154,7 +161,20 @@ const STAGES: &[(&str, &str, &str)] = &[
     ("ultraqa", "$ultraqa", "command"),
 ];
 
-fn session_start_context(cwd: &Path) -> Option<String> {
+/// Codex replaces any hook context over ~2,500 tokens with a head/tail preview and a path
+/// (codex-rs/hooks/src/output_spill.rs). Mirrors `SESSION_NOTES_MAX_CHARS` in
+/// `src/hooks/handler.ts`.
+const SESSION_NOTES_MAX_CHARS: usize = 4_000;
+
+fn cap_session_notes(notes: &str) -> String {
+    if notes.chars().count() <= SESSION_NOTES_MAX_CHARS {
+        return notes.to_string();
+    }
+    let head: String = notes.chars().take(SESSION_NOTES_MAX_CHARS).collect();
+    format!("{head}\n… (truncated; read .goat/SESSION.md for the rest)")
+}
+
+fn session_start_context(cwd: &Path, now: &str) -> Option<String> {
     let mut blocks: Vec<String> = Vec::new();
 
     if let Some(doc) = state::read_state(cwd) {
@@ -183,7 +203,26 @@ fn session_start_context(cwd: &Path) -> Option<String> {
                     } else {
                         format!(" ({artifact})")
                     };
-                    in_flight.push(format!("- {invocation}: {status}{suffix}"));
+                    // A stage still in flight carries its failures with it, so the
+                    // three-failures rule survives a restart. Mirrors handler.ts.
+                    let failing: Vec<&Json> = evidence
+                        .map(|entries| {
+                            entries
+                                .iter()
+                                .filter(|entry| entry.get("exitCode").and_then(Json::as_f64).is_some_and(|code| code != 0.0))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let failures = match failing.last() {
+                        Some(last) => format!(
+                            " — {} failing command(s), last: {} -> exit {}",
+                            failing.len(),
+                            last.get("command").and_then(Json::as_str).unwrap_or_default(),
+                            last.get("exitCode").and_then(Json::as_f64).unwrap_or(0.0) as i64
+                        ),
+                        None => String::new(),
+                    };
+                    in_flight.push(format!("- {invocation}: {status}{suffix}{failures}"));
                 }
                 "complete" => {
                     let proof = match unproven_reason(evidence, proof, artifact, &root) {
@@ -202,16 +241,39 @@ fn session_start_context(cwd: &Path) -> Option<String> {
         if !complete.is_empty() {
             blocks.push(format!("Stages already complete:\n{}", complete.join("\n")));
         }
+
+        // How old is what was just rehydrated? Only when something was — an absent state
+        // file must not produce this line. Mirrors handler.ts; >7 days asks for a
+        // confirmation before AGENTS.md's "resume from the first unfinished item" applies.
+        if !blocks.is_empty() {
+            if let Some(updated_at) = doc.get("updatedAt").and_then(Json::as_str) {
+                if let (Some(then), Some(at)) = (state::iso_to_epoch_seconds(updated_at), state::iso_to_epoch_seconds(now)) {
+                    let age = at - then;
+                    let stale = if age > 7 * 86_400 {
+                        " — confirm it is still current before resuming"
+                    } else {
+                        ""
+                    };
+                    blocks.push(format!(
+                        "Last codex-goat activity: {} ago ({updated_at}){stale}",
+                        state::describe_age(age)
+                    ));
+                }
+            }
+        }
     }
 
-    if let Some(digest) = state::memory_digest(cwd, 8) {
-        blocks.push(digest);
+    let memory = state::memory_config(cwd);
+    if memory.enabled {
+        if let Some(digest) = state::memory_digest(cwd, memory.digest_size) {
+            blocks.push(digest);
+        }
     }
 
     if let Ok(guidance) = std::fs::read_to_string(state::find_project_root(cwd).join(".goat").join("SESSION.md")) {
         let trimmed = guidance.trim();
         if !trimmed.is_empty() {
-            blocks.push(trimmed.to_string());
+            blocks.push(cap_session_notes(trimmed));
         }
     }
 

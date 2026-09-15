@@ -14,6 +14,22 @@ Two decisions taken after re-auditing the Codex source at v0.155.0-alpha (1,803 
 ### Fixed
 
 - `routing.ts`, the README and this changelog claimed Codex ranks sol at priority 0 and luna at 2. The catalog says 6 and 8, with Astra at 1. The rationale now cites the file it comes from.
+- **`goat doctor` now detects whether Codex will actually run the hooks.** Codex runs a user- or project-layer hook only after the user trusts it, records that trust in `config.toml` as `[hooks.state."<path>:<event>:<group>:<handler>"]`, and drops untrusted hooks silently; `codex exec` never prompts. On the machine this was found on, goat's hooks had been registered and inert since install, including through the README benchmark's TUI runs. Doctor now computes the same keys Codex does, reads the trust records, and names the handlers that will not run. It never writes trust: the hash covers the handler's exact definition and the prompt exists so a user sees what will run.
+- **Proof is content-level.** A zero-byte artifact closed `$plan` green (`: > plan.md`, then `--artifact plan.md`); a corrupt `state.json` made every stage report idle with exit 0 and doctor pass. Both runtimes now report an empty artifact as unproven, `goat status` warns and exits non-zero when the state file cannot be parsed, and doctor has a state-file check. The hook still stays quiet on a corrupt file, as it must.
+- **Forked sessions are rehydrated.** Codex 0.155 added `fork` as a SessionStart source; goat's exact-match list omitted it, so a forked thread started with none of the parent's workflow state. On older Codex the extra alternative is simply never matched.
+- **In-flight stages carry their failures across a restart.** SessionStart printed an active stage as status plus artifact only, so three recorded `npm test -> exit 1` runs resumed as zero and the three-failures rule in AGENTS.md started over. Both runtimes now append the failing-command count and the last failure.
+- **`--effort max` and `--effort ultra` were silently turned into `high`.** The launcher accepted only four levels; Codex's vocabulary has seven. Every level now passes through, and an unknown one is an error instead of a quiet substitution.
+- `memory.enabled` and `memory.digestSize` in `.goat/config.json`, written by `goat setup` since 0.1.0, were never read by either runtime. Both honour them now, and `GOAT_MEMORY=off` wins over the file.
+- `scripts/catalog-probe.mjs` tested for "Use when" while `$ultragoal` opens "Use for", so it reported the fixed skill as trigger-less. The bundle check also assumed a flat 119-character window; the real per-skill window is cost-based (name and path are charged first), so it now requires the trigger at offset 0.
+
+### Changed
+
+- **SessionStart says how old the rehydrated state is.** One line, only when something was rehydrated; past seven days it asks for confirmation before AGENTS.md's "resume from the first unfinished item" applies.
+- **`.goat/SESSION.md` is documented and capped.** It was read and injected by both runtimes and written by nothing, mentioned nowhere. It is now the place for notes the next session must not re-derive, injected up to 4,000 characters with a pointer to the file, under Codex's 2,500-token hook-output spill limit.
+- The Stop hook runs `async` and SessionStart carries a `statusMessage`. Stop only records an observation and never emits a decision, so nothing waits on it. Both fields were already parsed by Codex 0.147.0.
+- `$code-review` gains an **Omission** dimension: what the diff implies but does not contain — a mirrored runtime left unsynced, a doc row that now lies, a sibling script's regex. Refuting findings catches false positives; this is the row that hunts false negatives.
+- `$ultraqa` names the borrowed-environment cheat: a green run against a `node_modules` or build directory copied in from elsewhere is not a baseline.
+- Benchmark results record `goatVersion`, `goatCommit` and `goatDirty` next to `codexVersion`, so a result generated before a release that rewrote every description can no longer pass as current.
 
 ## [0.1.5] — 2026-09-03
 

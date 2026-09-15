@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeJsonAtomic } from "../core/fsx.js";
 import { goatPaths } from "../core/paths.js";
@@ -74,8 +74,12 @@ export function isSubstantiveEvidence(ref: EvidenceRef): boolean {
  * weaker behaviour instead of reporting a false failure.
  */
 export function unprovenReason(stage: StageState, stageId?: StageId, root?: string): string | null {
-  if (stage.artifact && root && !existsSync(join(root, stage.artifact))) {
-    return `artifact recorded but missing on disk: ${stage.artifact}`;
+  if (stage.artifact && root) {
+    const path = join(root, stage.artifact);
+    if (!existsSync(path)) return `artifact recorded but missing on disk: ${stage.artifact}`;
+    // Existence is not content. `: > plan.md` followed by `--artifact plan.md` closed a
+    // stage green until 0.1.6; a document with nothing in it proves nothing.
+    if (statSync(path).size === 0) return `artifact recorded but empty on disk: ${stage.artifact}`;
   }
 
   if (stage.evidence.some(isSubstantiveEvidence)) return null;
@@ -199,4 +203,27 @@ function isEvidenceRef(value: unknown): value is EvidenceRef {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<EvidenceRef>;
   return typeof candidate.command === "string" && typeof candidate.exitCode === "number";
+}
+
+/**
+ * Why `state.json` could not be used, or null when it is fine or absent.
+ *
+ * `readState` deliberately repairs anything unexpected so a corrupt file can never block a
+ * session. That is right for the hook and wrong for a human: until 0.1.6 a state file
+ * holding `{not json` made `goat status` print every stage idle with exit 0 and `goat
+ * doctor` pass, so the one signal that history had been lost was silence. The CLI surfaces
+ * this; the hook still stays quiet.
+ */
+export function stateFileProblem(cwd: string = process.cwd()): string | null {
+  const file = goatPaths(cwd).stateFile;
+  if (!existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return `${file} is not a JSON object; stage history is being ignored`;
+    }
+    return null;
+  } catch (error) {
+    return `${file} is not valid JSON (${(error as Error).message}); stage history is being ignored`;
+  }
 }

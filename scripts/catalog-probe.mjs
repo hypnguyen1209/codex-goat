@@ -60,7 +60,9 @@ let withTrigger = 0;
 for (const line of ours) {
   const desc = describe(line);
   const name = line.match(/([a-z-]+)(?:\/SKILL\.md)/)?.[1] ?? line.trim().split(":")[0].replace(/^-\s*/, "");
-  const trigger = /Use when/.test(desc);
+  // Same test as verify-bundle.mjs: $ultragoal opens "Use for", and a probe that only knew
+  // "Use when" reported the fixed skill as trigger-less for a whole release.
+  const trigger = /Use (when|for)/.test(desc);
   kept += desc.length;
   if (trigger) withTrigger += 1;
   console.log(

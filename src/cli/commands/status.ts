@@ -3,7 +3,7 @@ import { checkContract } from "../../state/contract.js";
 import { readLedger } from "../../state/ledger.js";
 import { STAGE_IDS, STAGES } from "../../state/stages.js";
 import { findProjectRoot } from "../../core/paths.js";
-import { readState, unprovenReason } from "../../state/store.js";
+import { readState, stateFileProblem, unprovenReason } from "../../state/store.js";
 
 /**
  * Reconcile claims against proof.
@@ -14,6 +14,10 @@ import { readState, unprovenReason } from "../../state/store.js";
 export function runStatus(cwd: string = process.cwd()): number {
   const state = readState(cwd);
   const root = findProjectRoot(cwd);
+  // readState repairs a corrupt file silently so a session is never blocked. A human asked
+  // for status; tell them the history they are looking at is not the history on disk.
+  const problem = stateFileProblem(cwd);
+  if (problem) log.warn(problem);
 
   log.out(color.bold("codex-goat status"));
   log.out(`objective: ${state.objective ?? color.dim("(none recorded)")}`);
@@ -70,5 +74,5 @@ export function runStatus(cwd: string = process.cwd()): number {
     log.detail("Evidence counts only when the command actually ran and exited 0.");
     return 1;
   }
-  return 0;
+  return problem ? 1 : 0;
 }

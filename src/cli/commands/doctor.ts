@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { readJson } from "../../core/fsx.js";
 import { color, log } from "../../core/log.js";
 import { allRoutes, compareVersions, parseCodexVersion } from "../../state/routing.js";
+import { stateFileProblem } from "../../state/store.js";
+import { hookTrustReport } from "../../setup/hook-trust.js";
 import {
   bundledDir,
   codexHome,
@@ -41,6 +43,7 @@ export function runDoctor(cwd: string = process.cwd()): number {
     ...checkSkillsInstalled(cwd),
     checkAgents(cwd),
     checkHooks(cwd),
+    checkState(cwd),
     checkStateRoot(cwd),
     checkNative(),
   ];
@@ -174,10 +177,24 @@ function checkHooks(cwd: string): Check {
       // Registration is not activation. Codex drops a hook whose handler is Untrusted
       // (codex-rs/hooks/src/engine/discovery.rs), and `codex exec` has no trust prompt at
       // all — so a green "registered" line was the most misleading output goat produced.
+      // Until 0.1.6 this could only say "trust them"; it now reads the trust records
+      // Codex keeps in config.toml and says which handlers will actually run.
+      const configToml = readOptionalText(join(codexHome(), "config.toml"));
+      const report = hookTrustReport(parsed, file, configToml);
+      const untrusted = report.filter((entry) => !entry.trusted).map((entry) => entry.event);
+      if (untrusted.length === 0 && report.length > 0) {
+        return {
+          name: "lifecycle hooks",
+          level: "pass",
+          detail: `trusted in ${file}: ${report.map((entry) => entry.event).join(", ")} (a folder opened "restricted", or the plugin disabled for a thread, still turns them off)`,
+        };
+      }
       return {
         name: "lifecycle hooks",
         level: "warn",
-        detail: `registered in ${file} — Codex must still TRUST them before they run (approve the prompt on next launch, or /hooks)`,
+        detail:
+          `registered in ${file} but NOT trusted: ${untrusted.join(", ")} — Codex silently skips them, and never asks in \`codex exec\`. ` +
+          "Approve the trust prompt in the Codex TUI (or run /hooks there); goat will not forge the trust record for you",
       };
     }
   }
@@ -186,6 +203,27 @@ function checkHooks(cwd: string): Check {
     level: "warn",
     detail: "goat hooks not registered; session context and memory injection are off",
   };
+}
+
+function readOptionalText(file: string): string {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * `readState` repairs a corrupt state file silently so a session is never blocked by it.
+ * A human running doctor wants the opposite: until 0.1.6 a `state.json` holding `{not json`
+ * passed here and every stage showed idle, with nothing saying history had been lost.
+ */
+function checkState(cwd: string): Check {
+  const problem = stateFileProblem(cwd);
+  if (problem) {
+    return { name: "state file", level: "fail", detail: `${problem}; fix or remove it, then re-run \`goat status\`` };
+  }
+  return { name: "state file", level: "pass", detail: existsSync(goatPaths(cwd).stateFile) ? "parses" : "not created yet" };
 }
 
 // There is deliberately no "is the hook handler built" check here.

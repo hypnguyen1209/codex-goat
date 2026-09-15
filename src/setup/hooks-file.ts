@@ -16,6 +16,10 @@ export interface HookCommand {
   type: "command";
   command: string;
   timeout?: number;
+  /** Run off the turn's critical path. Codex ignores this handler's output when set. */
+  async?: boolean;
+  /** Shown in the TUI while the hook runs. */
+  statusMessage?: string;
 }
 
 export interface HookMatcherGroup {
@@ -50,20 +54,31 @@ export function unsupportedTopLevelKeys(file: object | null): string[] {
 
 /**
  * SessionStart matchers are compared as an exact alternation list, not a regex
- * (codex-rs/hooks/src/events/common.rs). All four sources must be spelled out; omitting
+ * (codex-rs/hooks/src/events/common.rs). Every source must be spelled out; omitting
  * `compact` means the session context is never re-injected after a compaction, which is
- * exactly when the model has just lost it.
+ * exactly when the model has just lost it. `fork` arrived with Codex 0.155 — a forked
+ * thread needs the same rehydration as a resumed one. On older Codex the extra
+ * alternative is simply never matched; it does not invalidate the matcher.
  */
-export const SESSION_START_MATCHER = "startup|resume|clear|compact";
+export const SESSION_START_MATCHER = "startup|resume|clear|compact|fork";
 
 function isOwned(group: HookMatcherGroup): boolean {
   return group.hooks?.some((hook) => typeof hook.command === "string" && hook.command.includes(GOAT_HOOK_MARKER)) ?? false;
 }
 
+/** Ownership test shared with the trust report, which must key exactly the groups goat wrote. */
+export const isGoatHookGroup = isOwned;
+
 export function goatHookGroup(command: string, event: GoatHookEvent): HookMatcherGroup {
   const hook: HookCommand = { type: "command", command };
-  // Stop runs after the model's last message; give it room to persist memory.
-  if (event === "Stop") hook.timeout = 15;
+  if (event === "Stop") {
+    // Stop runs after the model's last message; give it room to persist memory. It only
+    // records an observation and never emits a decision, so nothing waits on its output:
+    // `async` takes it off the turn's critical path entirely.
+    hook.timeout = 15;
+    hook.async = true;
+  }
+  if (event === "SessionStart") hook.statusMessage = "codex-goat: loading workflow state";
   const group: HookMatcherGroup = { hooks: [hook] };
   if (event === "SessionStart") group.matcher = SESSION_START_MATCHER;
   return group;

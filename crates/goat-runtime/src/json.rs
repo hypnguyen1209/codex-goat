@@ -38,6 +38,20 @@ impl Json {
             _ => None,
         }
     }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Json::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Json::Number(value) => Some(*value),
+            _ => None,
+        }
+    }
 }
 
 pub fn parse(input: &str) -> Result<Json, String> {

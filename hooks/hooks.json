@@ -1,12 +1,14 @@
 {
+  "description": "codex-goat lifecycle hooks: rehydrate workflow state, attach entry contracts, record session memory. Never block.",
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "startup|resume|clear|compact|fork",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/hooks/goat-hook.mjs\""
+            "command": "node \"${PLUGIN_ROOT}/hooks/goat-hook.mjs\"",
+            "statusMessage": "codex-goat: loading workflow state"
           }
         ]
       }
@@ -27,7 +29,8 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/goat-hook.mjs\"",
-            "timeout": 15
+            "timeout": 15,
+            "async": true
           }
         ]
       }

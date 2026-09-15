@@ -274,9 +274,16 @@ for (const model of models) {
   }
 }
 
+const git = (...argv) => spawnSync("git", argv, { encoding: "utf8" }).stdout?.trim() ?? "";
 const data = {
   // No timestamp: it would churn the file on every run and say nothing useful.
   codexVersion: spawnSync("codex", ["--version"], { encoding: "utf8" }).stdout?.trim() ?? "unknown",
+  // Which codex-goat produced the goat arm. 0.1.5 rewrote every description and the
+  // AGENTS.md block after the checked-in results were generated, and nothing in the file
+  // said so. A result whose commit differs from HEAD, or that was dirty, is not comparable.
+  goatVersion: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+  goatCommit: git("rev-parse", "--short", "HEAD") || "unknown",
+  goatDirty: git("status", "--porcelain").length > 0,
   effort,
   label,
   projectDir,

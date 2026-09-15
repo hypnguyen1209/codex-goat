@@ -198,3 +198,118 @@ fn session_start_matches_the_proof_model() {
         "execution stage was accepted without a command: {response}"
     );
 }
+
+/// Existence is not content: an empty artifact proves nothing. Mirrors store.ts.
+#[test]
+fn session_start_rejects_an_empty_artifact() {
+    let dir = sandbox("empty-artifact");
+    fs::write(dir.join("plan.md"), "").expect("write empty artifact");
+    fs::write(
+        dir.join(".goat").join("state").join("state.json"),
+        r#"{"stages":{"plan":{"status":"complete","artifact":"plan.md","evidence":[]}}}"#,
+    )
+    .expect("write state");
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(
+        response.contains("artifact recorded but empty on disk: plan.md"),
+        "empty artifact accepted: {response}"
+    );
+}
+
+/// `.goat/config.json` `memory.enabled = false` must silence both recording and the digest.
+#[test]
+fn memory_config_disables_recording_and_the_digest() {
+    let dir = sandbox("memory-off");
+    fs::write(dir.join(".goat").join("config.json"), r#"{"memory":{"enabled":false}}"#).expect("write config");
+    let outcome = handle(
+        &payload("Stop", &dir, r#","last_assistant_message":"remember this""#),
+        "2026-09-15T00:00:00Z",
+    );
+    assert_eq!(outcome, HookOutcome::Handled("{}".to_string()));
+    assert!(
+        !dir.join(".goat").join("memory").join("observations.jsonl").exists(),
+        "an observation was recorded with memory disabled"
+    );
+}
+
+/// `digestSize` bounds the digest. Three distinct observations, size 2, two lines injected.
+#[test]
+fn memory_config_digest_size_is_honoured() {
+    let dir = sandbox("digest-size");
+    fs::write(dir.join(".goat").join("config.json"), r#"{"memory":{"enabled":true,"digestSize":2}}"#).expect("write config");
+    for text in ["first thing", "second thing", "third thing"] {
+        handle(
+            &payload("Stop", &dir, &format!(r#","last_assistant_message":"{text}""#)),
+            "2026-09-15T00:00:00Z",
+        );
+    }
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(!response.contains("first thing"), "digest exceeded digestSize: {response}");
+    assert!(response.contains("second thing") && response.contains("third thing"), "{response}");
+}
+
+/// A stage in flight carries its failures, so the three-failures rule survives a restart.
+#[test]
+fn session_start_shows_failing_commands_on_an_in_flight_stage() {
+    let dir = sandbox("in-flight-failures");
+    fs::write(
+        dir.join(".goat").join("state").join("state.json"),
+        r#"{"updatedAt":"2026-09-15T00:00:00.000Z","stages":{"ultragoal":{"status":"active","evidence":[
+            {"command":"npm test","exitCode":1,"at":"t"},{"command":"npm test","exitCode":1,"at":"t"}]}}}"#,
+    )
+    .expect("write state");
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:10:00Z") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(
+        response.contains("$ultragoal: active — 2 failing command(s), last: npm test -> exit 1"),
+        "failures not surfaced: {response}"
+    );
+    assert!(response.contains("Last codex-goat activity: 10 minutes ago"), "no staleness line: {response}");
+    assert!(!response.contains("confirm it is still current"), "10 minutes is not stale: {response}");
+}
+
+#[test]
+fn session_start_flags_state_older_than_a_week() {
+    let dir = sandbox("stale-state");
+    fs::write(
+        dir.join(".goat").join("state").join("state.json"),
+        r#"{"updatedAt":"2026-09-01T00:00:00.000Z","objective":"old goal","stages":{}}"#,
+    )
+    .expect("write state");
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(response.contains("14 days ago"), "{response}");
+    assert!(response.contains("confirm it is still current before resuming"), "{response}");
+}
+
+/// Session notes are capped under Codex's 2,500-token spill limit and point at the file.
+#[test]
+fn session_notes_are_capped_with_a_pointer() {
+    let dir = sandbox("notes-cap");
+    fs::write(dir.join(".goat").join("SESSION.md"), "x".repeat(6_000)).expect("write notes");
+    let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
+        panic!("SessionStart must be handled natively");
+    };
+    assert!(response.contains("truncated; read .goat/SESSION.md for the rest"), "{response}");
+    assert!(response.len() < 5_000, "notes were not capped: {} bytes", response.len());
+}
+
+#[test]
+fn iso_timestamps_parse_and_diff() {
+    use goat_runtime::state::{describe_age, iso_to_epoch_seconds};
+    let a = iso_to_epoch_seconds("2026-09-15T07:22:53.790Z").expect("parse a");
+    let b = iso_to_epoch_seconds("2026-09-15T07:32:53Z").expect("parse b");
+    assert_eq!(b - a, 600);
+    assert_eq!(iso_to_epoch_seconds("1970-01-01T00:00:00Z"), Some(0));
+    assert_eq!(iso_to_epoch_seconds("garbage"), None);
+    assert_eq!(describe_age(30), "moments");
+    assert_eq!(describe_age(600), "10 minutes");
+    assert_eq!(describe_age(5 * 3_600), "5 hours");
+    assert_eq!(describe_age(14 * 86_400), "14 days");
+}

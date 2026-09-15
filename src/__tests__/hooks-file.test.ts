@@ -50,6 +50,15 @@ test("Stop carries a timeout so memory writes are not cut off", () => {
   assert.equal(installed.hooks?.Stop?.[0]?.hooks[0]?.timeout, 15);
 });
 
+// Stop only records an observation and never emits a decision, so nothing waits on it.
+// `async` takes it off the turn's critical path; 0.147.0 already parses the field.
+test("Stop runs async and SessionStart announces itself in the TUI", () => {
+  const installed = installHooks(null, COMMAND);
+  assert.equal(installed.hooks?.Stop?.[0]?.hooks[0]?.async, true);
+  assert.equal(typeof installed.hooks?.SessionStart?.[0]?.hooks[0]?.statusMessage, "string");
+  assert.equal(installed.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.async, undefined, "prompt context must stay synchronous");
+});
+
 test("uninstall removes only goat entries", () => {
   const removed = uninstallHooks(installHooks(foreignHook, COMMAND));
   assert.equal(removed?.hooks?.PreToolUse?.length, 1);
@@ -89,10 +98,11 @@ test("a clean file reports no unsupported keys", () => {
 });
 
 // Regression: the matcher is an exact alternation list, not a regex. Omitting `compact`
-// meant the session digest was never re-injected after a compaction.
-test("SessionStart matches all four sources, including compact", () => {
+// meant the session digest was never re-injected after a compaction; omitting `fork`
+// (Codex 0.155) meant a forked thread started with none of the parent's workflow state.
+test("SessionStart matches all five sources, including compact and fork", () => {
   const matcher = installHooks(null, COMMAND).hooks?.SessionStart?.[0]?.matcher ?? "";
-  for (const source of ["startup", "resume", "clear", "compact"]) {
+  for (const source of ["startup", "resume", "clear", "compact", "fork"]) {
     assert.ok(matcher.split("|").includes(source), `${source} is not matched: ${matcher}`);
   }
 });

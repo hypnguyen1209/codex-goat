@@ -343,9 +343,15 @@ Three Codex lifecycle hooks, registered by `goat setup`:
 
 | Event | What it does |
 | --- | --- |
-| `SessionStart` | Injects the active objective, in-flight stages, unproven claims, and a memory digest. Matches all four sources — `startup`, `resume`, `clear`, **`compact`** — so the state is re-injected after a compaction, which is exactly when the model has lost it |
+| `SessionStart` | Injects the active objective, in-flight stages with their failing commands, unproven claims, how old the state is, a memory digest, and `.goat/SESSION.md`. Matches all five sources — `startup`, `resume`, `clear`, **`compact`**, `fork` — so the state is re-injected after a compaction, which is exactly when the model has lost it, and into a forked thread |
 | `UserPromptSubmit` | When a prompt invokes a stage, attaches that stage's entry-contract report |
-| `Stop` | Records the turn's outcome into session memory |
+| `Stop` | Records the turn's outcome into session memory. Runs `async`: it never emits a decision, so nothing waits on it |
+
+**Trust.** Codex runs a user- or project-layer hook only after you have trusted it, and `codex exec` never asks. Until then the hooks are registered and inert, and nothing says so. `goat doctor` reads the trust records Codex keeps in `config.toml` and reports which handlers will actually run; approve the prompt in the Codex TUI (or `/hooks` there). goat never writes the trust record for you.
+
+**Session notes.** Anything the next session must not re-derive — approaches ruled out and why, questions not to ask again — goes in `.goat/SESSION.md`, in your own words. SessionStart injects its first 4,000 characters and points at the file for the rest, because Codex replaces any hook context over about 2,500 tokens with a preview.
+
+**Memory switches.** `.goat/config.json` carries `memory.enabled` and `memory.digestSize`; both runtimes honour them, and `GOAT_MEMORY=off` wins over the file. If you turn on Codex's native memories, goat's digest stays complementary (project-scoped, evidence-shaped), but this is where you turn it off if you would rather not have both.
 
 Three properties hold for every hook, and are covered by tests in both implementations:
 

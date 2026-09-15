@@ -173,3 +173,16 @@ test("--no-goat-defaults suppresses routing too", () => {
 test("an unknown stage is rejected rather than silently ignored", () => {
   assert.throws(() => argsFor(["--for", "nonsense"]), /Unknown stage/);
 });
+
+// Codex's effort vocabulary reaches `max` and `ultra`. Until 0.1.6 `--effort max` was
+// silently turned into `high` — the opposite of what a wrapper should do with an explicit
+// instruction. Whether a given model accepts a level is Codex's error to raise.
+test("Codex's full effort vocabulary passes through", () => {
+  for (const effort of ["minimal", "max", "ultra"]) {
+    assert.ok(argsFor(["--effort", effort]).includes(`model_reasoning_effort="${effort}"`), `${effort} was downgraded`);
+  }
+});
+
+test("an unknown effort is rejected, not silently replaced", () => {
+  assert.throws(() => argsFor(["--effort", "turbo"]), /Unknown reasoning effort 'turbo'/);
+});

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findProjectRoot } from "../core/paths.js";
+import { readJson } from "../core/fsx.js";
+import { findProjectRoot, goatPaths } from "../core/paths.js";
 import { checkContract } from "../state/contract.js";
 import { memoryDigest, recordObservation } from "../state/memory.js";
 import { normalizeStageId, STAGES, type StageId } from "../state/stages.js";
@@ -52,7 +53,7 @@ export function handleHook(input: HookInput): HookOutput {
       return context(event, userPromptContext(String(input.prompt ?? ""), sessionId, cwd));
     case "Stop": {
       const message = input.last_assistant_message;
-      if (typeof message === "string" && message.length > 0) {
+      if (typeof message === "string" && message.length > 0 && memoryConfig(cwd).enabled) {
         recordObservation({ sessionId, kind: "result", text: message }, cwd);
       }
       return {};
@@ -81,7 +82,13 @@ function sessionStartContext(cwd: string): string | null {
   if (inFlight.length > 0) {
     const lines = inFlight.map((id) => {
       const stage = state.stages[id];
-      return `- ${STAGES[id].invocation}: ${stage.status}${stage.artifact ? ` (${stage.artifact})` : ""}`;
+      // A stage still in flight carries its failures with it. Until 0.1.6 they were only
+      // inspected once a stage was `complete`, so three recorded `npm test -> exit 1` runs
+      // resumed as zero and the three-failures rule in AGENTS.md started over.
+      const failing = stage.evidence.filter((ref) => ref.exitCode !== 0);
+      const last = failing[failing.length - 1];
+      const failures = last ? ` — ${failing.length} failing command(s), last: ${last.command} -> exit ${last.exitCode}` : "";
+      return `- ${STAGES[id].invocation}: ${stage.status}${stage.artifact ? ` (${stage.artifact})` : ""}${failures}`;
     });
     blocks.push(`Stages in flight:\n${lines.join("\n")}`);
   }
@@ -97,13 +104,65 @@ function sessionStartContext(cwd: string): string | null {
     blocks.push(`Stages already complete:\n${lines.join("\n")}`);
   }
 
-  const digest = memoryDigest(8, cwd);
-  if (digest) blocks.push(digest);
+  // Nothing renders how old the rehydrated state is, and AGENTS.md says to resume from the
+  // first unfinished item unconditionally — a three-week-old objective resumed exactly like
+  // one from an hour ago. One line, only when something was actually rehydrated: a fresh
+  // repo's emptyState() stamps updatedAt = now and must not produce it.
+  if (blocks.length > 0) {
+    const ageSeconds = (Date.now() - Date.parse(state.updatedAt)) / 1000;
+    if (Number.isFinite(ageSeconds)) {
+      const stale = ageSeconds > 7 * 86_400 ? " — confirm it is still current before resuming" : "";
+      blocks.push(`Last codex-goat activity: ${describeAge(ageSeconds)} ago (${state.updatedAt})${stale}`);
+    }
+  }
 
-  const guidance = readOptional(join(findProjectRoot(cwd), ".goat", "SESSION.md"));
-  if (guidance) blocks.push(guidance.trim());
+  const memory = memoryConfig(cwd);
+  if (memory.enabled) {
+    const digest = memoryDigest(memory.digestSize, cwd);
+    if (digest) blocks.push(digest);
+  }
+
+  const guidance = readOptional(join(goatPaths(cwd).root, "SESSION.md"));
+  if (guidance) blocks.push(capSessionNotes(guidance.trim()));
 
   return blocks.length > 0 ? blocks.join("\n\n") : null;
+}
+
+/**
+ * Codex replaces any hook context over ~2,500 tokens with a head/tail preview and a path
+ * (codex-rs/hooks/src/output_spill.rs), which would take the objective and the stage list
+ * down with the notes. Cap the one unbounded block well under that and point at the file,
+ * which the model can read on demand.
+ */
+const SESSION_NOTES_MAX_CHARS = 4_000;
+
+function capSessionNotes(notes: string): string {
+  if (notes.length <= SESSION_NOTES_MAX_CHARS) return notes;
+  return `${notes.slice(0, SESSION_NOTES_MAX_CHARS)}\n… (truncated; read .goat/SESSION.md for the rest)`;
+}
+
+/**
+ * `.goat/config.json` has carried `memory: { enabled, digestSize }` since `goat setup` first
+ * wrote it, and until 0.1.6 nothing read it. Mirrors `memory_config` in
+ * crates/goat-runtime/src/state.rs. `GOAT_MEMORY=off` wins over the file, so a user who
+ * turns on Codex's native memories can silence goat's without editing anything.
+ */
+export function memoryConfig(cwd: string): { enabled: boolean; digestSize: number } {
+  if ((process.env.GOAT_MEMORY ?? "").trim().toLowerCase() === "off") return { enabled: false, digestSize: 8 };
+  const config = readJson<{ memory?: { enabled?: unknown; digestSize?: unknown } }>(goatPaths(cwd).config, {});
+  const enabled = config.memory?.enabled !== false;
+  const size = config.memory?.digestSize;
+  const digestSize = typeof size === "number" && Number.isFinite(size) && size >= 1 && size <= 50 ? Math.floor(size) : 8;
+  return { enabled, digestSize };
+}
+
+/** `3 minutes`, `5 hours`, `12 days` — coarse on purpose; a resumed session needs the order of magnitude. */
+export function describeAge(seconds: number): string {
+  const s = Math.max(0, seconds);
+  if (s < 90) return "moments";
+  if (s < 90 * 60) return `${Math.round(s / 60)} minutes`;
+  if (s < 36 * 3600) return `${Math.round(s / 3600)} hours`;
+  return `${Math.round(s / 86_400)} days`;
 }
 
 /**
@@ -112,7 +171,7 @@ function sessionStartContext(cwd: string): string | null {
  * exactly which requirements are already satisfied and which it must gather inline.
  */
 function userPromptContext(prompt: string, sessionId: string, cwd: string): string | null {
-  recordObservation({ sessionId, kind: "prompt", text: prompt }, cwd);
+  if (memoryConfig(cwd).enabled) recordObservation({ sessionId, kind: "prompt", text: prompt }, cwd);
 
   const stage = detectStage(prompt);
   if (!stage) return null;

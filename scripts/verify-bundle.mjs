@@ -63,16 +63,18 @@ for (const name of skillNames) {
     "must mention codex-goat so setup/uninstall can identify ownership",
   );
   // Codex gives the whole skill catalog one character budget and splits it across every
-  // installed skill, cutting each description by prefix at roughly budget/N. Measured on a
-  // 116-skill machine, that leaves 119 chars. Every description used to open with what the
-  // skill DOES and put "Use when ..." at the end, so all eight trigger clauses were cut off
-  // and the skills competed for routing on a truncated sentence fragment. Lead with the
-  // trigger; the description of the method survives on lighter installs.
+  // installed skill, cutting each description by prefix. The per-skill window is COST-based
+  // (codex-rs/ext/skills/src/render.rs allocate_description_chars): a line's name and file
+  // locator are charged first, so a plugin-namespaced skill with a long path gets fewer
+  // description chars than its neighbours — measured 98-102 for codex-goat against 122-123
+  // for shorter lines on the same 127-skill install. No fixed window is safe to assume.
+  // Every description used to open with what the skill DOES and put "Use when ..." at the
+  // end, so all eight trigger clauses were cut off. The trigger goes at offset 0, full stop.
   // Measure a real install with: codex debug prompt-input > d.json && node scripts/catalog-probe.mjs d.json
   check(
-    `skill ${name} trigger survives truncation`,
-    /Use (when|for)/.test((front.description ?? "").slice(0, 119)),
-    "no 'Use when/for' trigger in the first 119 chars; it will be truncated away on a busy install",
+    `skill ${name} trigger leads the description`,
+    /^Use (when|for)\b/.test(front.description ?? ""),
+    "description must START with 'Use when' or 'Use for'; anything before it is what a busy catalog keeps",
   );
 }
 

@@ -157,3 +157,87 @@ pub fn memory_digest(start: &Path, limit: usize) -> Option<String> {
         lines.join("\n")
     ))
 }
+
+/// What `.goat/config.json` says about memory: whether observations are recorded and
+/// injected at all, and how many distinct entries the digest carries.
+///
+/// `goat setup` has written `memory: { enabled: true, digestSize: 8 }` since 0.1.0, and
+/// until 0.1.6 nothing read it — both runtimes hardcoded 8 and recorded unconditionally.
+/// Mirrors `memoryConfig` in `src/hooks/handler.ts`. `GOAT_MEMORY=off` wins over the file,
+/// so a user with Codex's native memories on can silence goat's without editing anything.
+pub struct MemoryConfig {
+    pub enabled: bool,
+    pub digest_size: usize,
+}
+
+pub fn memory_config(start: &Path) -> MemoryConfig {
+    let mut config = MemoryConfig {
+        enabled: true,
+        digest_size: 8,
+    };
+    if std::env::var("GOAT_MEMORY").map(|v| v.eq_ignore_ascii_case("off")).unwrap_or(false) {
+        config.enabled = false;
+        return config;
+    }
+    let Ok(raw) = fs::read_to_string(goat_root(start).join("config.json")) else {
+        return config;
+    };
+    let Ok(doc) = json::parse(&raw) else {
+        return config;
+    };
+    if let Some(memory) = doc.get("memory") {
+        if let Some(enabled) = memory.get("enabled").and_then(Json::as_bool) {
+            config.enabled = enabled;
+        }
+        if let Some(size) = memory.get("digestSize").and_then(Json::as_f64) {
+            if size.is_finite() && (1.0..=50.0).contains(&size) {
+                config.digest_size = size as usize;
+            }
+        }
+    }
+    config
+}
+
+/// Seconds since the Unix epoch for an ISO-8601 UTC timestamp such as
+/// `2026-09-15T07:22:53.790Z`. Fractional seconds and any trailing zone are ignored.
+/// Hand-rolled because the runtime carries no date crate; only the difference between
+/// two such values is ever used, so leap seconds do not matter.
+pub fn iso_to_epoch_seconds(iso: &str) -> Option<i64> {
+    let bytes = iso.as_bytes();
+    if bytes.len() < 19 || bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T' {
+        return None;
+    }
+    let num = |from: usize, to: usize| -> Option<i64> { iso.get(from..to)?.parse::<i64>().ok() };
+    let (year, month, day) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (hour, minute, second) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    // Days from civil (Howard Hinnant), valid for the proleptic Gregorian calendar.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + hour * 3_600 + minute * 60 + second)
+}
+
+/// `3 minutes`, `5 hours`, `12 days` — coarse on purpose; a resumed session needs the
+/// order of magnitude, not the second.
+pub fn describe_age(seconds: i64) -> String {
+    let seconds = seconds.max(0);
+    if seconds < 90 {
+        return "moments".to_string();
+    }
+    let minutes = seconds / 60;
+    if minutes < 90 {
+        return format!("{minutes} minutes");
+    }
+    let hours = seconds / 3_600;
+    if hours < 36 {
+        return format!("{hours} hours");
+    }
+    format!("{} days", seconds / 86_400)
+}
