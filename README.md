@@ -18,7 +18,7 @@ npm install -g codex-goat
 
 codex-goat does not replace Codex, wrap its model calls, or fork its source. It keeps Codex as the execution engine and makes it easier to:
 
-- **start a stronger Codex session by default** — `goat` launches `codex` with raised reasoning effort, per-stage model routing, and project guidance already loaded
+- **start a stronger Codex session by default** — `goat` launches `codex` with raised reasoning effort, no approval prompts and no sandbox (yolo; `--safe` keeps Codex's own defaults), per-stage model routing, and project guidance already loaded
 - **run one consistent workflow from clarification to completion** — six stages that share a state directory, an evidence ledger, and one set of operating rules
 - **invoke that workflow with `$plan`, `$ultragoal`, `$team`, `$code-review`, and `$ultraqa` — each independently, no fixed chain**
 - **keep plans, goals, reviews, and state in `.goat/`**, surviving compaction and restarts
@@ -79,7 +79,7 @@ npm view codex-goat dist.attestations
 Then work normally:
 
 ```bash
-goat --madmax --xhigh
+goat --xhigh
 ```
 
 Inside the session, invoke whichever stage the work actually needs:
@@ -129,7 +129,7 @@ flowchart TB
         model{{"model turn"}}
     end
 
-    user -->|"goat --madmax --xhigh"| cli
+    user -->|"goat --xhigh"| cli
     cli -->|"spawn, argv forwarded verbatim"| proc
     cli -->|"goat setup writes"| assets
     assets -->|".agents/skills · AGENTS.md · hooks.json"| proc
@@ -307,7 +307,9 @@ The exit-code check is the load-bearing one: v0.1.0 stored `exitCode`, wrote it 
 goat [flags] [codex args...]           launch Codex with stronger defaults
   --high | --xhigh | --medium | --low  reasoning effort (default: high)
   --effort <level>                     the same, explicit
-  --madmax                             codex --dangerously-bypass-approvals-and-sandbox
+  --safe                               keep Codex's own approvals and sandbox (default is yolo:
+                                       approval_policy=never, sandbox_mode=danger-full-access)
+  --madmax                             codex --dangerously-bypass-approvals-and-sandbox (same as the default)
   --worktree                           forwarded to codex: its managed worktree (codex >= 0.155)
   --no-goat-defaults                   forward argv to codex untouched
   --print-argv                         print the resolved codex command and exit
@@ -328,11 +330,14 @@ goat uninstall [--scope ...] [--purge-state]
 Nothing is hidden. `goat --print-argv` shows the exact command that would run:
 
 ```bash
-$ goat --madmax --xhigh -m gpt-5 "fix the bug" --print-argv
-codex -c 'model_reasoning_effort="xhigh"' --dangerously-bypass-approvals-and-sandbox -m gpt-5 'fix the bug'
+$ goat --xhigh -m gpt-5 "fix the bug" --print-argv
+codex -c 'model_reasoning_effort="xhigh"' -c 'approval_policy="never"' -c 'sandbox_mode="danger-full-access"' -m gpt-5 'fix the bug'
+
+$ goat --safe -s read-only --print-argv
+codex -c 'model_reasoning_effort="high"' -s read-only
 ```
 
-Flags codex-goat does not own are forwarded to Codex in the order you typed them.
+Flags codex-goat does not own are forwarded to Codex in the order you typed them. The two permission overrides are the yolo default; an explicit `-s`, `-a`, `--full-auto`, `--yolo`, or your own `-c` for either key replaces the matching one, wherever it appears on the line, and `--safe` drops both.
 
 ## Role cards
 
@@ -467,10 +472,10 @@ Codex has grown three runtime features that the stages now lean on where they ex
 A Codex session runs one model, so a stage cannot switch models mid-conversation. What makes per-stage routing work is that `.goat/` is durable: `$plan` writes an artifact, the session ends, and a new session on a different model picks it up through the same entry contract. The split is **across sessions**, not inside one — which is exactly what the entry-contract design was for.
 
 ```bash
-goat --for plan --madmax        # deliberation session  -> gpt-6-astra (gpt-5.6-sol below codex 0.153)
+goat --for plan                 # deliberation session  -> gpt-6-astra (gpt-5.6-sol below codex 0.153)
 #   $clarify / $plan / $code-review, writes .goat/plans/…
 
-goat --for ultragoal --madmax   # execution session     -> gpt-5.6-luna
+goat --for ultragoal            # execution session     -> gpt-5.6-luna
 #   $ultragoal picks up the plan artifact and runs
 ```
 

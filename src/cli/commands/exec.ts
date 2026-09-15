@@ -4,8 +4,8 @@ import { GoatError, log } from "../../core/log.js";
 import { bundledDir } from "../../core/paths.js";
 import { runInherit } from "../../core/proc.js";
 import type { ParsedArgs } from "../args.js";
-import { flagString } from "../args.js";
-import { codexBinary } from "../launch.js";
+import { flagBool, flagString } from "../args.js";
+import { codexBinary, permissionOverrides } from "../launch.js";
 
 /**
  * `goat exec` is the real smoke test: it forces Codex to authenticate and complete a
@@ -26,9 +26,13 @@ export async function runExec(parsed: ParsedArgs): Promise<number> {
   const args = ["exec", "--skip-git-repo-check", "-C", process.cwd()];
   const effort = flagString(parsed.flags, "effort");
   if (effort) args.push("-c", `model_reasoning_effort="${effort}"`);
+  // Same yolo default as the launcher; explicit permission flags after `--` win.
+  const yolo = permissionOverrides(parsed.passthrough, flagBool(parsed.flags, "safe"));
+  args.push(...yolo.args);
   args.push(...parsed.passthrough, composed);
 
   log.detail(`codex exec via ${role ? `role '${role}'` : "no role"}`);
+  for (const note of yolo.notes) log.detail(note);
   return runInherit(codexBinary(), args);
 }
 

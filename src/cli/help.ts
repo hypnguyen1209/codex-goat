@@ -13,7 +13,9 @@ ${color.bold("Usage")}
 ${color.bold("Launch flags")}
   --high | --xhigh | --medium | --low    reasoning effort (default: high)
   --effort <level>                       same, explicit form
-  --madmax                               codex --dangerously-bypass-approvals-and-sandbox
+  --safe                                 keep Codex's own approvals and sandbox (default is yolo:
+                                         approval_policy=never, sandbox_mode=danger-full-access)
+  --madmax                               codex --dangerously-bypass-approvals-and-sandbox (same as the default)
   --worktree                             forwarded to codex: its managed worktree (codex >= 0.155)
   --for <stage>                          launch the model that stage is routed to
   --no-goat-defaults                     forward argv to codex untouched
@@ -42,6 +44,6 @@ ${color.bold("A good first session")}
   goat setup --scope project
   goat doctor
   goat exec "Reply with exactly GOAT-OK"
-  goat --madmax --xhigh
+  goat --xhigh
 `);
 }

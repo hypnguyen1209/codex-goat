@@ -35,8 +35,55 @@ function withCodexVersion<T>(version: string | undefined, fn: () => T): T {
   }
 }
 
-test("injects high reasoning effort by default", () => {
-  assert.deepEqual(argsFor([]), ["-c", 'model_reasoning_effort="high"']);
+const YOLO = ["-c", 'approval_policy="never"', "-c", 'sandbox_mode="danger-full-access"'];
+
+test("injects high reasoning effort and yolo permissions by default", () => {
+  assert.deepEqual(argsFor([]), ["-c", 'model_reasoning_effort="high"', ...YOLO]);
+});
+
+// goat's job is to let Codex finish work, so no approvals and no sandbox is the default.
+// It is injected as the two config overrides Codex's own --yolo sets, so --print-argv
+// shows it and anything explicit the user types wins.
+test("--safe keeps Codex's own approval and sandbox defaults", () => {
+  const plan = planFor(["--safe"]);
+  assert.deepEqual(plan.args, ["-c", 'model_reasoning_effort="high"']);
+  assert.ok(plan.notes.some((note) => /^safe:/.test(note)));
+  assert.ok(!plan.args.includes("--safe"), "--safe leaked into the codex argv");
+});
+
+test("an explicit sandbox flag suppresses only the sandbox override", () => {
+  for (const argv of [["-s", "read-only"], ["--sandbox", "workspace-write"], ["--sandbox=read-only"], ["-c", "sandbox_mode=read-only"], ["--config=sandbox_mode=read-only"]]) {
+    const args = argsFor(argv);
+    assert.ok(!args.includes('sandbox_mode="danger-full-access"'), `${argv.join(" ")}: sandbox override still injected`);
+    assert.ok(args.includes('approval_policy="never"'), `${argv.join(" ")}: approval override wrongly dropped`);
+  }
+});
+
+test("an explicit approval flag suppresses only the approval override", () => {
+  for (const argv of [["-a", "on-request"], ["--ask-for-approval=untrusted"], ["-c", "approval_policy=on-failure"]]) {
+    const args = argsFor(argv);
+    assert.ok(!args.includes('approval_policy="never"'), `${argv.join(" ")}: approval override still injected`);
+    assert.ok(args.includes('sandbox_mode="danger-full-access"'), `${argv.join(" ")}: sandbox override wrongly dropped`);
+  }
+});
+
+test("Codex's own combined permission flags suppress both overrides", () => {
+  for (const argv of [["--full-auto"], ["--yolo"], ["--dangerously-bypass-approvals-and-sandbox"], ["--madmax"]]) {
+    const plan = planFor(argv);
+    assert.ok(!plan.args.includes('approval_policy="never"') && !plan.args.includes('sandbox_mode="danger-full-access"'), `${argv[0]}: override injected alongside`);
+    assert.ok(plan.notes.some((note) => /keeping your explicit/.test(note)), `${argv[0]}: no note`);
+  }
+});
+
+test("a permission flag after -- still counts as the user's choice", () => {
+  const args = argsFor(["--", "-s", "read-only"]);
+  assert.ok(!args.includes('sandbox_mode="danger-full-access"'), "goat overrode a sandbox the user typed after --");
+  assert.ok(args.includes('approval_policy="never"'));
+  assert.deepEqual(args.slice(-2), ["-s", "read-only"]);
+});
+
+test("--no-goat-defaults suppresses the yolo overrides too", () => {
+  assert.deepEqual(argsFor(["--no-goat-defaults"]), []);
 });
 
 test("--xhigh raises the effort", () => {

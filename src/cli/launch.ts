@@ -42,7 +42,62 @@ export interface LaunchPlan {
  * a boolean, checkouts under `~/.codex/worktrees`), so goat's `../<repo>.goat-worktrees`
  * implementation was retired after 0.1.5 and the flag now reaches Codex untouched.
  */
-const CONSUMED = new Set(["madmax", "xhigh", "high", "medium", "low", "no-goat-defaults", "print-argv", "effort", "for"]);
+const CONSUMED = new Set(["madmax", "safe", "xhigh", "high", "medium", "low", "no-goat-defaults", "print-argv", "effort", "for"]);
+
+/**
+ * goat runs Codex in yolo mode by default: no approval prompts, no sandbox. That is the
+ * point of a wrapper whose whole job is to let Codex finish work, and it is what
+ * `--madmax` used to opt into. It is injected as the two config overrides Codex's own
+ * `--yolo` flag sets, so `--print-argv` shows it and any explicit permission flag or
+ * `-c` for the same key the user types wins. `--safe` keeps Codex's own defaults.
+ */
+const YOLO_APPROVAL = ["-c", 'approval_policy="never"'];
+const YOLO_SANDBOX = ["-c", 'sandbox_mode="danger-full-access"'];
+
+/** Which permission keys the user already set explicitly, so goat must not override them. */
+export function explicitPermissions(tokens: readonly string[]): { approval: boolean; sandbox: boolean } {
+  let approval = false;
+  let sandbox = false;
+  // Scanned past `--` too: a permission flag the user typed anywhere is theirs to keep.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? "";
+    if (token === "-a" || token === "--ask-for-approval" || token.startsWith("--ask-for-approval=")) approval = true;
+    if (token === "-s" || token === "--sandbox" || token.startsWith("--sandbox=")) sandbox = true;
+    if (token === "--full-auto" || token === "--yolo" || token === "--dangerously-bypass-approvals-and-sandbox" || token === "--madmax") {
+      approval = true;
+      sandbox = true;
+    }
+    // `-c key=value`, `-c=key=value`, `--config key=value`, `--config=key=value`.
+    let override: string | null = null;
+    if (token === "-c" || token === "--config") override = tokens[index + 1] ?? null;
+    else if (token.startsWith("-c=")) override = token.slice(3);
+    else if (token.startsWith("--config=")) override = token.slice(9);
+    if (override?.startsWith("approval_policy=")) approval = true;
+    if (override?.startsWith("sandbox_mode=")) sandbox = true;
+  }
+  return { approval, sandbox };
+}
+
+/** The yolo overrides goat injects, minus any key the user set explicitly. */
+export function permissionOverrides(tokens: readonly string[], safe: boolean): { args: string[]; notes: string[] } {
+  if (safe) return { args: [], notes: ["safe: Codex's own approval and sandbox defaults"] };
+  const explicit = explicitPermissions(tokens);
+  const args: string[] = [];
+  const injected: string[] = [];
+  if (!explicit.approval) {
+    args.push(...YOLO_APPROVAL);
+    injected.push("approvals never");
+  }
+  if (!explicit.sandbox) {
+    args.push(...YOLO_SANDBOX);
+    injected.push("sandbox danger-full-access");
+  }
+  const notes =
+    injected.length > 0
+      ? [`yolo: ${injected.join(", ")} (--safe to opt out)`]
+      : ["yolo: keeping your explicit approval and sandbox flags"];
+  return { args, notes };
+}
 
 /** Goat flags that swallow the following token (`--effort high`). */
 const CONSUMED_WITH_VALUE = new Set(["effort", "for"]);
@@ -70,6 +125,9 @@ export function buildLaunchPlan(parsed: ParsedArgs, cwd: string = process.cwd())
   if (useDefaults) {
     args.push("-c", `model_reasoning_effort="${effort}"`);
     notes.push(`reasoning effort = ${effort}`);
+    const yolo = permissionOverrides(parsed.raw, flagBool(parsed.flags, "safe"));
+    args.push(...yolo.args);
+    notes.push(...yolo.notes);
   }
 
   // An explicit -m/--model always wins; routing only fills a gap the user left.

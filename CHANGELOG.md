@@ -2,6 +2,12 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`goat` runs Codex in yolo mode by default.** No approval prompts and no sandbox: `-c approval_policy="never" -c sandbox_mode="danger-full-access"`, the two overrides Codex's own `--yolo` flag sets. A wrapper whose job is to let Codex finish work should not stop it to ask; `--madmax` used to opt into exactly this and now merely restates the default. It is injected as config overrides rather than the flag so `--print-argv` shows it and anything explicit wins: `-s`/`--sandbox`, `-a`/`--ask-for-approval`, `--full-auto`, `--yolo`, or your own `-c` for either key suppresses the matching default, wherever in the command line it appears. `--safe` keeps Codex's own approval and sandbox defaults; `--no-goat-defaults` still injects nothing. `goat exec` gets the same default, with explicit flags after `--` respected the same way.
+
 ## [0.1.6] — 2026-09-15
 
 Two decisions taken after re-auditing the Codex source at v0.155.0-alpha (1,803 commits past the 0.147.0 that was installed here). Both are implemented version-aware, because the Codex that ships them is newer than the one most installs have today.
