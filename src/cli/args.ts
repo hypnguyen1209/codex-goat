@@ -30,6 +30,7 @@ export const GOAT_COMMANDS = new Set([
   "skills",
   "hook",
   "uninstall",
+  "roles",
   "help",
   "version",
 ]);

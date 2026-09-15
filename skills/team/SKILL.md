@@ -68,19 +68,57 @@ Write `.goat/goals/<slug>-team.md`:
 File ownership is exclusive. A lane that needs a file it does not own stops and reports;
 it does not reach across.
 
-### 2. Run the lanes
+### 2. Run the lanes as parallel agents
 
-Each lane, independently:
+This step explicitly asks for parallel agent work: spawn one sub-agent per lane with
+`spawn_agent` and let them run at the same time. Codex's spawn tool tells the model not to
+spawn unless a skill or the user asks for delegation in so many words — this sentence is
+that request.
 
-1. Implement only inside its owned files.
-2. Run its verification command.
-3. Record evidence, tagged with the lane:
-   ```sh
-   goat ledger evidence --stage team --exit <code> -- <command>   # L<n>: <lane name>
-   ```
+Each spawn message is the lane's own section of `.goat/goals/<slug>-team.md`, verbatim,
+followed by:
 
-A failing lane does not stop the others. Record it as blocked, keep the rest moving, and
-report it at merge.
+> You are lane L<n> of a `$team` run. Other agents are editing other files in this
+> checkout right now: touch only your owned files, do not revert their edits, and do not
+> run `goat state` or `goat ledger` — the root records evidence. Implement the outcome,
+> run the verify command, and end with exactly one line:
+> `LANE L<n> <name>: files=<paths> verify=<command> exit=<code> status=done|blocked — <one line>`
+
+Rules for the spawn:
+
+- Start each lane fresh. Its message is self-contained, so it does not need this
+  conversation: if the tool offers `fork_context`, set it `false`; if it offers
+  `fork_turns`, pass `"none"`.
+- Leave `model` unset. Omit `agent_type`: a lane runs the default agent with its brief as
+  its whole task. (`executor` is the only role card written for implementation work; if you
+  deliberately want it as a lane's developer message, say so in the lanes file.)
+- Never put a `$stage` sigil in a spawn message; a lane is not a stage invocation.
+- Spawn at most what the tool allows open at once (six on the default tool set). A finished
+  lane still holds its slot until you `close_agent` it: record its evidence, close it, then
+  spawn the next batch.
+- `wait_agent` with several ids returns as soon as the first one finishes. Call it again
+  with the lanes still outstanding until every lane has reported. A blocked lane does not
+  stop the others.
+
+As each lane returns, verify it **from here**. Its last line tells you what to run, not
+what to write: re-run the lane's verify command yourself and record the exit code you
+observed, tagged with the lane:
+
+```sh
+<lane verify command>; echo "exit=$?"
+goat ledger evidence --stage team --exit <observed code> -- <command>   # L<n>: <lane name>
+```
+
+If the command cannot run from here, record nothing for that lane and report it as
+unverified.
+
+Lanes do not write the ledger themselves. State is a read-modify-write of one file, and two
+lanes finishing together would overwrite each other's proof — a silent loss that `goat
+status` cannot see. One writer, the root, serialises it.
+
+If `spawn_agent` is not available in this session, run the lanes yourself, one after
+another, with exactly the same ownership rules. `$team` still holds without parallelism; it
+just stops being faster.
 
 ### 3. Merge
 
@@ -114,9 +152,9 @@ at the path you record — `goat status` opens it, and a path that was never wri
 
 ## Report contract
 
-Return, per lane: name, owned files, outcome, verification command and exit code, and
-blocked status if any. Then the merged verification result. A lane with no evidence is
-reported as unverified, never as done.
+Return, per lane: name, owned files, outcome, verification command and exit code, the
+agent that ran it, and blocked status if any. Then the merged verification result. A lane
+with no evidence is reported as unverified, never as done.
 
 ## Handoff
 

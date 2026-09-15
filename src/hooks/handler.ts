@@ -30,6 +30,9 @@ export interface HookInput {
   cwd?: string;
   prompt?: string;
   source?: string;
+  /** Set when the event fired inside a spawned sub-agent rather than the root thread. */
+  agent_id?: string;
+  agent_type?: string;
   last_assistant_message?: string | null;
   [key: string]: unknown;
 }
@@ -50,6 +53,12 @@ export function handleHook(input: HookInput): HookOutput {
     case "SessionStart":
       return context(event, sessionStartContext(cwd));
     case "UserPromptSubmit":
+      // A spawned sub-agent's first message is its lane brief from $team, not a user
+      // prompt: recording it would fill the memory digest with lane text, and a `$stage`
+      // sigil inside it would attach a contract report to a lane that is not a stage.
+      // Codex marks these with agent_id (codex-rs/hooks/src/schema.rs); the root thread
+      // never carries one.
+      if (typeof input.agent_id === "string" && input.agent_id.length > 0) return {};
       return context(event, userPromptContext(String(input.prompt ?? ""), sessionId, cwd));
     case "Stop": {
       const message = input.last_assistant_message;

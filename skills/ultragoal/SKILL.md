@@ -55,6 +55,16 @@ Write `.goat/goals/<slug>.md`:
 Every goal names its verification command up front. A goal whose verification you cannot
 name yet is not a goal — it is a question, and it belongs in `$clarify`.
 
+If this session has a `create_goal` tool, this sentence is the explicit request: call it
+now with the objective, in one sentence. If it fails because a goal is already active,
+leave that goal alone — it is the user's — and run on the goals file only. Codex then
+re-prompts you while the goal is active, audits completion, and tells you to mark the goal
+`blocked` once the same obstacle has held for three turns running — a per-turn cousin of
+the three-failures rule below (Codex counts turns, this skill counts attempts). The goal is
+bound to this thread: it returns on `codex resume`, but a new session never sees it, and it
+holds no evidence, so the goals file stays the durable record. Do not create a goal for a
+run that will finish in this turn.
+
 ### 2. Drive each goal
 
 For each goal, in order:
@@ -80,6 +90,13 @@ goat state set --stage ultragoal --status complete --artifact .goat/goals/<slug>
   --summary "<what shipped>"
 goat status
 ```
+
+If you created a Codex goal at the start, close it in the same breath: `update_goal` with
+`status: complete` when every box is ticked. When you stop short after three failures, say
+so in your reply and leave the goal active — Codex's own rule is `blocked` only after the
+same blocker has held for three consecutive goal turns, and it will re-prompt you until
+then; mark it `blocked` at that point, not before. Never mark `complete` to stop the
+re-prompting: that is a false claim.
 
 `goat status` reports a stage as `complete*` when its evidence does not back the claim:
 none recorded, every command exited non-zero, or every command is a shell no-op. If your

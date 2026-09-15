@@ -180,7 +180,7 @@ codex-goat replaces the chain with **entry contracts**. Each stage declares what
 | `$clarify` | nothing | frozen requirements + a recorded objective |
 | `$plan` | an objective | plan with testable acceptance criteria |
 | `$ultragoal` | an objective + an approach | goal ledger with per-checkpoint evidence |
-| `$team` | an objective + 2+ independent lanes | lane assignments and merged evidence |
+| `$team` | an objective + 2+ independent lanes | one Codex sub-agent per lane, evidence recorded by the root, merged verification |
 | `$code-review` | a change | verified findings, most severe first |
 | `$ultraqa` | something runnable | scenario matrix and QA report |
 
@@ -441,6 +441,16 @@ flowchart LR
 ```
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
+
+## Native Codex features the stages use
+
+Codex has grown three runtime features that the stages now lean on where they exist, and work without where they do not.
+
+**Sub-agents in `$team`.** Codex's `spawn_agent` tool tells the model not to spawn unless a skill or the user asks for delegation in so many words, so `$team` says so: one sub-agent per lane, started fresh with the lane's own section of the lanes file as its whole brief, then `wait_agent` until every lane has returned, closing each once its evidence is recorded (a finished lane holds its slot until closed). Lanes never write the ledger — state is one file and two lanes finishing together would overwrite each other's proof — so the root re-runs each lane's verify command itself and records the exit code it observed. A lane's brief arrives inside the sub-agent as a `UserPromptSubmit`, which goat's hook recognises by its `agent_id` and ignores: it is neither a prompt to remember nor a stage to contract. Without `spawn_agent`, `$team` runs the lanes serially under the same ownership rules. Multi-agent v1 has been on by default since well before 0.147.0.
+
+**Goals in `$ultragoal`.** When the session has `create_goal`, `$ultragoal` registers the objective with it. Codex then keeps the run going across turns on its own, audits completion, and asks the model to mark the goal blocked once the same obstacle has held for three consecutive turns; Codex itself only force-stops after three turns of failed commands or three empty turns. That is a per-turn cousin of goat's three-failures rule, not the same rule. The goal is bound to its thread, so it returns on `codex resume` but a new session never sees it; the `.goat/goals/<slug>.md` file stays the durable record and the ledger stays the proof. The goal is closed with `update_goal` in the same breath as `goat state set`. On by default since 0.133.0.
+
+**Agent roles, opt-in.** `goat roles install [--scope user|project]` writes the nine role cards under `prompts/` as Codex agent roles (`<config>/agents/<role>.toml`: `name`, `description`, `developer_instructions`), which makes each one an `agent_type` a lane or a sub-task can be spawned with. It is opt-in because every installed role adds its name and description to the spawn tool's schema on every turn. `goat roles uninstall` removes exactly the files goat wrote and nothing else; a `reviewer.toml` of your own is never touched. Codex has discovered role files since 0.115.0 (the loader moved into its own crate in 0.150.0), and `goat roles` and `goat doctor` say so when the installed CLI is older. Project-scope roles load only in a project Codex trusts; an untrusted checkout's `.codex` layer is disabled.
 
 ## Model routing: plan on Astra, execute on Luna
 

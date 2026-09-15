@@ -29,6 +29,7 @@ ${color.bold("Commands")}
   state read|set|clear                   durable stage state under .goat/
   ledger read|evidence|note              append-only workflow record
   skills [--roles]                       list bundled stages, skills, and role prompts
+  roles install|uninstall|list [--scope] ship the role cards as Codex agent roles (codex >= 0.115)
   hook                                   run one lifecycle hook payload from stdin
   uninstall [--scope ...] [--purge-state]
   help | version

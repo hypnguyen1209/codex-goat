@@ -78,6 +78,23 @@ for (const name of skillNames) {
   );
 }
 
+// --- $team asks for parallel agents, and keeps the ledger single-writer -----------------
+// Codex's spawn tool tells the model not to spawn unless a skill or the user asks for
+// delegation in so many words (multi_agents_spec.rs: "Do not spawn sub-agents unless ...
+// skill instructions explicitly ask"). A $team that never says "spawn_agent" is prose about
+// concurrency run serially. And a lane that writes the ledger races the other lanes on one
+// state file.
+{
+  const team = readFileSync(join(root, "skills", "team", "SKILL.md"), "utf8");
+  check("team skill asks for spawn_agent", team.includes("spawn_agent"), "the spawn request must be explicit or Codex will not delegate");
+  check(
+    "team skill keeps the ledger single-writer",
+    /Lanes do not write the ledger themselves/.test(team) && /do not\s+(?:>\s*)?run `goat state` or `goat ledger`/.test(team),
+    "lanes must be told not to record evidence; two finishing together lose proof",
+  );
+  check("team skill degrades without spawn_agent", /If `spawn_agent` is not available/.test(team), "$team must still work serially");
+}
+
 // --- stages have skills -----------------------------------------------------
 const stagesSource = readFileSync(join(root, "src", "state", "stages.ts"), "utf8");
 const stageBlock = stagesSource.match(/export const STAGE_IDS = \[([\s\S]*?)\] as const;/);

@@ -226,3 +226,18 @@ test("SESSION.md is capped under the spill limit and points at the file", () => 
   assert.ok(context.length < 5_000, `not capped: ${context.length} chars`);
   assert.match(context, /truncated; read \.goat\/SESSION\.md for the rest/);
 });
+
+// $team spawns one sub-agent per lane. Each lane's brief arrives as a UserPromptSubmit
+// carrying agent_id; it is neither a user prompt to remember nor a stage to contract.
+test("UserPromptSubmit inside a spawned sub-agent records nothing and attaches nothing", () => {
+  const output = handleHook({
+    hook_event_name: "UserPromptSubmit",
+    cwd: process.cwd(),
+    prompt: "$plan lane brief for L2",
+    agent_id: "agent-42",
+    // Codex sends the spawn role name here, "default" when none was given.
+    agent_type: "default",
+  });
+  assert.deepEqual(output, {});
+  assert.equal(recentObservations(10, process.cwd()).length, 0, "a lane brief was recorded as a prompt");
+});

@@ -5,6 +5,9 @@ import { color, log } from "../../core/log.js";
 import { allRoutes, compareVersions, parseCodexVersion } from "../../state/routing.js";
 import { stateFileProblem } from "../../state/store.js";
 import { hookTrustReport } from "../../setup/hook-trust.js";
+import { agentRolesDir, installedGoatRoles } from "../../setup/agent-roles.js";
+import { AGENT_ROLES_MIN_CODEX } from "./roles.js";
+import { codexVersion } from "../launch.js";
 import {
   bundledDir,
   codexHome,
@@ -44,6 +47,7 @@ export function runDoctor(cwd: string = process.cwd()): number {
     checkAgents(cwd),
     checkHooks(cwd),
     checkState(cwd),
+    checkAgentRoles(cwd),
     checkStateRoot(cwd),
     checkNative(),
   ];
@@ -224,6 +228,40 @@ function checkState(cwd: string): Check {
     return { name: "state file", level: "fail", detail: `${problem}; fix or remove it, then re-run \`goat status\`` };
   }
   return { name: "state file", level: "pass", detail: existsSync(goatPaths(cwd).stateFile) ? "parses" : "not created yet" };
+}
+
+/**
+ * Optional, so never a warning: the role files cost schema tokens on every turn and a
+ * user who has not asked for them has lost nothing. What IS worth saying is when they are
+ * installed on a Codex too old to load them, which fails silently.
+ */
+function checkAgentRoles(cwd: string): Check {
+  const found = (["project", "user"] as const)
+    .map((scope) => ({ scope, roles: installedGoatRoles(agentRolesDir(scope, cwd)) }))
+    .filter((entry) => entry.roles.length > 0);
+  if (found.length === 0) {
+    return { name: "agent roles", level: "pass", detail: "not installed (optional: `goat roles install` makes the role cards spawn_agent types)" };
+  }
+  const where = found.map((entry) => `${entry.roles.length} in ${agentRolesDir(entry.scope, cwd)}`).join(", ");
+  // Same probe the launcher and `goat roles` use, so the three never disagree. It throws
+  // when no codex is resolvable, and a doctor check must never abort the doctor.
+  let installed: string | null = null;
+  try {
+    installed = codexVersion();
+  } catch {
+    installed = null;
+  }
+  if (installed !== null && compareVersions(installed, AGENT_ROLES_MIN_CODEX) < 0) {
+    return {
+      name: "agent roles",
+      level: "warn",
+      detail: `${where} — but Codex ${installed} ignores them; agent roles load from ${AGENT_ROLES_MIN_CODEX}`,
+    };
+  }
+  const projectNote = found.some((entry) => entry.scope === "project")
+    ? "; project-scope roles load only in a project Codex trusts"
+    : "";
+  return { name: "agent roles", level: "pass", detail: `${where}${projectNote}` };
 }
 
 // There is deliberately no "is the hook handler built" check here.

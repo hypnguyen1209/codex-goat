@@ -8,6 +8,7 @@ import { parseArgs } from "./args.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runExec } from "./commands/exec.js";
 import { runHook } from "./commands/hook.js";
+import { runRoles } from "./commands/roles.js";
 import { runSetup } from "./commands/setup.js";
 import { runSkills } from "./commands/skills.js";
 import { runContract, runLedger, runState } from "./commands/state.js";
@@ -54,6 +55,8 @@ export async function main(argv: readonly string[]): Promise<number> {
       return runSkills(parsed);
     case "hook":
       return runHook();
+    case "roles":
+      return runRoles(parsed);
     case "uninstall":
       return runUninstall(parsed);
     default:
