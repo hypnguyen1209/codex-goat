@@ -94,9 +94,7 @@ fn unproven_reason(evidence: Option<&Vec<Json>>, proof: &str, artifact: &str, ro
     if !artifact.is_empty() {
         match std::fs::metadata(root.join(artifact)) {
             Err(_) => return Some(format!("artifact recorded but missing on disk: {artifact}")),
-            Ok(meta) if meta.len() == 0 => {
-                return Some(format!("artifact recorded but empty on disk: {artifact}"))
-            }
+            Ok(meta) if meta.len() == 0 => return Some(format!("artifact recorded but empty on disk: {artifact}")),
             Ok(_) => {}
         }
     }
@@ -209,7 +207,12 @@ fn session_start_context(cwd: &Path, now: &str) -> Option<String> {
                         .map(|entries| {
                             entries
                                 .iter()
-                                .filter(|entry| entry.get("exitCode").and_then(Json::as_f64).is_some_and(|code| code != 0.0))
+                                .filter(|entry| {
+                                    entry
+                                        .get("exitCode")
+                                        .and_then(Json::as_f64)
+                                        .is_some_and(|code| code != 0.0)
+                                })
                                 .collect()
                         })
                         .unwrap_or_default();
@@ -247,7 +250,10 @@ fn session_start_context(cwd: &Path, now: &str) -> Option<String> {
         // confirmation before AGENTS.md's "resume from the first unfinished item" applies.
         if !blocks.is_empty() {
             if let Some(updated_at) = doc.get("updatedAt").and_then(Json::as_str) {
-                if let (Some(then), Some(at)) = (state::iso_to_epoch_seconds(updated_at), state::iso_to_epoch_seconds(now)) {
+                if let (Some(then), Some(at)) = (
+                    state::iso_to_epoch_seconds(updated_at),
+                    state::iso_to_epoch_seconds(now),
+                ) {
                     let age = at - then;
                     let stale = if age > 7 * 86_400 {
                         " — confirm it is still current before resuming"

@@ -238,7 +238,11 @@ fn memory_config_disables_recording_and_the_digest() {
 #[test]
 fn memory_config_digest_size_is_honoured() {
     let dir = sandbox("digest-size");
-    fs::write(dir.join(".goat").join("config.json"), r#"{"memory":{"enabled":true,"digestSize":2}}"#).expect("write config");
+    fs::write(
+        dir.join(".goat").join("config.json"),
+        r#"{"memory":{"enabled":true,"digestSize":2}}"#,
+    )
+    .expect("write config");
     for text in ["first thing", "second thing", "third thing"] {
         handle(
             &payload("Stop", &dir, &format!(r#","last_assistant_message":"{text}""#)),
@@ -248,8 +252,14 @@ fn memory_config_digest_size_is_honoured() {
     let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
         panic!("SessionStart must be handled natively");
     };
-    assert!(!response.contains("first thing"), "digest exceeded digestSize: {response}");
-    assert!(response.contains("second thing") && response.contains("third thing"), "{response}");
+    assert!(
+        !response.contains("first thing"),
+        "digest exceeded digestSize: {response}"
+    );
+    assert!(
+        response.contains("second thing") && response.contains("third thing"),
+        "{response}"
+    );
 }
 
 /// A stage in flight carries its failures, so the three-failures rule survives a restart.
@@ -269,8 +279,14 @@ fn session_start_shows_failing_commands_on_an_in_flight_stage() {
         response.contains("$ultragoal: active — 2 failing command(s), last: npm test -> exit 1"),
         "failures not surfaced: {response}"
     );
-    assert!(response.contains("Last codex-goat activity: 10 minutes ago"), "no staleness line: {response}");
-    assert!(!response.contains("confirm it is still current"), "10 minutes is not stale: {response}");
+    assert!(
+        response.contains("Last codex-goat activity: 10 minutes ago"),
+        "no staleness line: {response}"
+    );
+    assert!(
+        !response.contains("confirm it is still current"),
+        "10 minutes is not stale: {response}"
+    );
 }
 
 #[test]
@@ -285,7 +301,10 @@ fn session_start_flags_state_older_than_a_week() {
         panic!("SessionStart must be handled natively");
     };
     assert!(response.contains("14 days ago"), "{response}");
-    assert!(response.contains("confirm it is still current before resuming"), "{response}");
+    assert!(
+        response.contains("confirm it is still current before resuming"),
+        "{response}"
+    );
 }
 
 /// Session notes are capped under Codex's 2,500-token spill limit and point at the file.
@@ -296,8 +315,15 @@ fn session_notes_are_capped_with_a_pointer() {
     let HookOutcome::Handled(response) = handle(&payload("SessionStart", &dir, ""), "2026-09-15T00:00:00Z") else {
         panic!("SessionStart must be handled natively");
     };
-    assert!(response.contains("truncated; read .goat/SESSION.md for the rest"), "{response}");
-    assert!(response.len() < 5_000, "notes were not capped: {} bytes", response.len());
+    assert!(
+        response.contains("truncated; read .goat/SESSION.md for the rest"),
+        "{response}"
+    );
+    assert!(
+        response.len() < 5_000,
+        "notes were not capped: {} bytes",
+        response.len()
+    );
 }
 
 #[test]

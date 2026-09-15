@@ -175,7 +175,10 @@ pub fn memory_config(start: &Path) -> MemoryConfig {
         enabled: true,
         digest_size: 8,
     };
-    if std::env::var("GOAT_MEMORY").map(|v| v.eq_ignore_ascii_case("off")).unwrap_or(false) {
+    if std::env::var("GOAT_MEMORY")
+        .map(|v| v.eq_ignore_ascii_case("off"))
+        .unwrap_or(false)
+    {
         config.enabled = false;
         return config;
     }
