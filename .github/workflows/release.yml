@@ -168,10 +168,14 @@ jobs:
           # so this is the same value on a real release and correct everywhere else.
           VERSION="${{ needs.check.outputs.version }}"
           STAGE="goat-runtime-${VERSION}-${{ matrix.name }}"
-          mkdir "${STAGE}"
-          cp "target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}" "${STAGE}/"
-          cp LICENSE "${STAGE}/"
-          cat > "${STAGE}/README.txt" <<EOF
+          # The staging directory lives under out/ so its name cannot collide with the raw
+          # binary published beside the archive: on unix that binary is named exactly
+          # "goat-runtime-<version>-<name>", and v0.1.6's first release run copied it INTO a
+          # same-named directory, then shipped the directory.
+          mkdir -p "out/${STAGE}"
+          cp "target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}" "out/${STAGE}/"
+          cp LICENSE "out/${STAGE}/"
+          cat > "out/${STAGE}/README.txt" <<EOF
           goat-runtime ${VERSION} (${{ matrix.name }})
 
           Optional native fast path for codex-goat's SessionStart and Stop hooks.
@@ -195,13 +199,19 @@ jobs:
       - name: Archive
         shell: bash
         run: |
+          # Archive from inside out/ so the archive's top-level directory keeps the
+          # release name without the staging parent.
           if [ "${{ matrix.archive }}" = "zip" ]; then
-            7z a "${STAGE}.zip" "${STAGE}" >/dev/null
+            (cd out && 7z a "../${STAGE}.zip" "${STAGE}" >/dev/null)
             echo "ARCHIVE=${STAGE}.zip" >> "$GITHUB_ENV"
           else
-            tar czf "${STAGE}.tar.gz" "${STAGE}"
+            tar czf "${STAGE}.tar.gz" -C out "${STAGE}"
             echo "ARCHIVE=${STAGE}.tar.gz" >> "$GITHUB_ENV"
           fi
+          # Both assets must be plain files at the top level, or the release job's
+          # sha256sum sees a directory — exactly the v0.1.6 failure.
+          test -f "${ARCHIVE:-${STAGE}.tar.gz}" || test -f "${STAGE}.zip"
+          test -f "${RAW}"
 
       - uses: actions/upload-artifact@v4
         with:
