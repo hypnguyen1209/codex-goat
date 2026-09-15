@@ -276,7 +276,10 @@ export async function launch(parsed: ParsedArgs): Promise<number> {
   // by `goat uninstall --scope user`.
   if (process.env.GOAT_SKIP_SETUP !== "1" && !isUserScopeInstalled()) {
     log.info("first launch: installing codex-goat for this user (skills, AGENTS guidance, hooks)");
-    performSetup("user", { force: false, quiet: true });
+    const { rehashedHooks } = performSetup("user", { force: false, quiet: true });
+    if (rehashedHooks.length > 0) {
+      log.warn(`hook definitions changed (${rehashedHooks.join(", ")}); re-approve them in the Codex TUI (/hooks) or Codex will skip them`);
+    }
     log.detail("done; Codex will ask once to trust the hooks. `goat uninstall --scope user` removes all of it");
   }
   // Same net for the native runtime: npm gates global install scripts behind

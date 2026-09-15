@@ -190,7 +190,16 @@ function checkHooks(cwd: string): Check {
         return {
           name: "lifecycle hooks",
           level: "pass",
-          detail: `trusted in ${file}: ${report.map((entry) => entry.event).join(", ")} (a folder opened "restricted", or the plugin disabled for a thread, still turns them off)`,
+          // Deliberately not "trusted": goat reads whether a trust record exists, not
+          // whether its hash still matches the handler on disk. Codex hashes the
+          // definition, so an upgrade that changes a timeout leaves a record that no
+          // longer matches, and Codex drops the hook as `Modified` without a word.
+          // Claiming "trusted" there would be the same false green the untrusted-hook
+          // check was added to remove.
+          detail:
+            `trust records present in ${file} for ${report.map((entry) => entry.event).join(", ")} — ` +
+            "goat checks that a record exists, not that its hash still matches, so re-approve in /hooks after any upgrade " +
+            '(a folder opened "restricted", or the plugin disabled for a thread, also turns them off)',
         };
       }
       return {

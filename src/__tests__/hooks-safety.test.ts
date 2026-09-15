@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { readJson, readJsonFile, stripBom } from "../core/fsx.js";
-import { goatHookGroup, installHooks, uninstallHooks } from "../setup/hooks-file.js";
+import { changedGoatHooks, goatHookGroup, installHooks, SESSION_START_MATCHER, uninstallHooks } from "../setup/hooks-file.js";
 
 const sandbox = mkdtempSync(join(tmpdir(), "goat-hooks-safety-"));
 after(() => rmSync(sandbox, { recursive: true, force: true }));
@@ -69,6 +69,34 @@ test("a byte-order mark does not make a valid file look corrupt", () => {
   const read = readJsonFile<{ hooks: unknown }>(file);
   assert.equal(read.kind, "ok", "a BOM-prefixed file must parse");
   assert.deepEqual(readJson(file, null), { hooks: { Stop: [] } });
+});
+
+// Codex hashes the handler definition (command, matcher, timeout, async, statusMessage)
+// and stores that hash on approval. Changing any field makes the stored hash stale, Codex
+// marks the handler `Modified`, and only Trusted/Managed handlers run — so an upgrade that
+// edits a hook silently disables goat on every machine that had approved it. Adding
+// `timeout: 10` in 0.1.8 was exactly such a change.
+test("a changed hook definition is reported so the user can re-approve", () => {
+  const stale: Parameters<typeof changedGoatHooks>[0] = {
+    hooks: {
+      SessionStart: [{ matcher: SESSION_START_MATCHER, hooks: [{ type: "command", command: COMMAND, timeout: 5 }] }],
+      Stop: [{ hooks: [{ type: "command", command: COMMAND, timeout: 15, async: true }] }],
+    },
+  };
+  const next = installHooks(stale, COMMAND);
+  const changed = changedGoatHooks(stale, next);
+  assert.ok(changed.includes("SessionStart"), "a changed timeout/statusMessage must be reported");
+  assert.ok(!changed.includes("UserPromptSubmit"), "a hook that was not previously present is not a re-approval");
+});
+
+test("reinstalling an unchanged file reports nothing to re-approve", () => {
+  const installed = installHooks(null, COMMAND);
+  assert.deepEqual(changedGoatHooks(installed, installHooks(installed, COMMAND)), []);
+});
+
+test("a foreign hook that goat never owned is not reported as changed", () => {
+  const foreign = { hooks: { Stop: [{ hooks: [{ type: "command" as const, command: "node /other/tool.js" }] }] } };
+  assert.deepEqual(changedGoatHooks(foreign, installHooks(foreign, COMMAND)), []);
 });
 
 test("a foreign hook survives a full install then uninstall round trip", () => {

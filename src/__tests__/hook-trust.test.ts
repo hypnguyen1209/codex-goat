@@ -60,6 +60,27 @@ test("Windows paths match through TOML escaping and separator differences", () =
   assert.equal(byEvent.Stop, false);
 });
 
+// Codex writes a Windows user-scope key as a TOML LITERAL string (single quotes, no
+// escaping) because the path is full of backslashes; plugin keys come out double-quoted.
+// Matching only the double-quoted form reported every Windows user's trusted hooks as
+// untrusted, which is the exact false alarm the trust check exists to avoid.
+test("both TOML quoted-key forms are recognised", () => {
+  const toml = [
+    "[hooks.state.'C:\\Users\\Admin\\.codex\\hooks.json:session_start:0:0']",
+    'trusted_hash = "sha256:aaa"',
+    "",
+    '[hooks.state."superpowers@superpowers:hooks/hooks.json:stop:0:0"]',
+    'trusted_hash = "sha256:bbb"',
+  ].join("\n");
+  const trusted = trustedHookKeys(toml);
+  assert.ok(trusted.has("c:/users/admin/.codex/hooks.json:session_start:0:0"), "literal-string key missed");
+  assert.ok(trusted.has("superpowers@superpowers:hooks/hooks.json:stop:0:0"), "basic-string key missed");
+
+  const report = hookTrustReport(installHooks(null, COMMAND), "C:\\Users\\Admin\\.codex\\hooks.json", toml);
+  assert.equal(report.find((entry) => entry.event === "SessionStart")?.trusted, true);
+  assert.equal(report.find((entry) => entry.event === "Stop")?.trusted, false);
+});
+
 test("an empty config trusts nothing, and the report still lists every goat handler", () => {
   const report = hookTrustReport(installHooks(null, COMMAND), "/h/hooks.json", "");
   assert.equal(report.length, 3);

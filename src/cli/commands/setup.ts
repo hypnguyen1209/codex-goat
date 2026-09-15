@@ -13,7 +13,13 @@ import {
   userSkillsRoot,
 } from "../../core/paths.js";
 import { hasAgentsSection, mergeAgentsSection } from "../../setup/agents-md.js";
-import { type HooksFile, installHooks, unsupportedTopLevelKeys } from "../../setup/hooks-file.js";
+import {
+  changedGoatHooks,
+  type GoatHookEvent,
+  type HooksFile,
+  installHooks,
+  unsupportedTopLevelKeys,
+} from "../../setup/hooks-file.js";
 import type { ParsedArgs } from "../args.js";
 import { flagBool, flagString } from "../args.js";
 
@@ -47,13 +53,23 @@ export function resolveTargets(scope: Scope, cwd: string = process.cwd()): Setup
   };
 }
 
+/**
+ * What a setup run produced. `rehashedHooks` is the part callers must not swallow: npm
+ * buffers a lifecycle script's stderr, so an `npm i -g` upgrade that changes a hook
+ * definition would otherwise invalidate the user's approval with nothing said.
+ */
+export interface SetupResult {
+  targets: SetupTargets;
+  rehashedHooks: GoatHookEvent[];
+}
+
 export function runSetup(parsed: ParsedArgs, cwd: string = process.cwd()): number {
   const scopeFlag = flagString(parsed.flags, "scope") ?? "project";
   if (scopeFlag !== "user" && scopeFlag !== "project") {
     throw new GoatError(`Unknown --scope '${scopeFlag}'.`, "Use --scope user or --scope project.");
   }
   const force = flagBool(parsed.flags, "force");
-  const targets = performSetup(scopeFlag, { force, cwd });
+  performSetup(scopeFlag, { force, cwd });
   log.detail("next: `goat doctor`, then `goat --madmax --xhigh` from your project");
   return 0;
 }
@@ -63,14 +79,14 @@ export function runSetup(parsed: ParsedArgs, cwd: string = process.cwd()): numbe
  * registrations, and the seeded `.goat/`. Idempotent and marker-based, so npm's
  * postinstall and the first `goat` launch can call it as freely as `goat setup` does.
  */
-export function performSetup(scope: Scope, options: { force?: boolean; cwd?: string; quiet?: boolean } = {}): SetupTargets {
+export function performSetup(scope: Scope, options: { force?: boolean; cwd?: string; quiet?: boolean } = {}): SetupResult {
   const targets = resolveTargets(scope, options.cwd ?? process.cwd());
   if (!options.quiet) log.info(`installing codex-goat (${targets.scope} scope)`);
 
   installSkills(targets, options.force ?? false);
   installRoleReferences(targets);
   installAgentsGuidance(targets);
-  installHookRegistrations(targets);
+  const rehashedHooks = installHookRegistrations(targets);
   seedGoatRoot(targets);
 
   if (!options.quiet) {
@@ -80,7 +96,7 @@ export function performSetup(scope: Scope, options: { force?: boolean; cwd?: str
     log.detail(`hooks    -> ${targets.hooksFile}`);
     log.detail(`state    -> ${targets.goatRoot}`);
   }
-  return targets;
+  return { targets, rehashedHooks };
 }
 
 /**
@@ -140,11 +156,11 @@ function installAgentsGuidance(targets: SetupTargets): void {
   log.ok(`AGENTS guidance merged into ${targets.agentsFile}`);
 }
 
-function installHookRegistrations(targets: SetupTargets): void {
+function installHookRegistrations(targets: SetupTargets): GoatHookEvent[] {
   const script = join(packageRoot(), "hooks", "goat-hook.mjs");
   if (!existsSync(script)) {
     log.warn(`hook script missing at ${script}; skipping hook registration`);
-    return;
+    return [];
   }
   const command = `node "${script}"`;
   const read = readJsonFile<HooksFile>(targets.hooksFile);
@@ -153,7 +169,7 @@ function installHookRegistrations(targets: SetupTargets): void {
     // unparseable file read as `null` and setup wrote a fresh one holding only goat's hooks.
     log.warn(`did not register hooks: ${targets.hooksFile} is not valid JSON (${read.reason})`);
     log.detail("fix or remove that file, then re-run `goat setup`; goat will not overwrite a hooks file it cannot read");
-    return;
+    return [];
   }
   const existing = read.kind === "ok" ? read.value : null;
 
@@ -164,10 +180,21 @@ function installHookRegistrations(targets: SetupTargets): void {
     log.detail("Codex parses hooks.json with deny_unknown_fields; keeping it would disable every hook in the file");
   }
 
+  const next = installHooks(existing, command);
+  // Codex's trust hash covers the handler definition, so editing one invalidates an
+  // approval the user already gave and Codex then skips the hook without a word.
+  const rehashed = changedGoatHooks(existing, next);
+
   mkdirSync(join(targets.hooksFile, ".."), { recursive: true });
-  writeJsonAtomic(targets.hooksFile, installHooks(existing, command));
+  writeJsonAtomic(targets.hooksFile, next);
   log.ok(`hooks registered in ${targets.hooksFile}`);
-  log.detail("Codex asks once to trust new hooks; approve it to enable session context injection");
+  if (rehashed.length > 0) {
+    log.warn(`hook definitions changed (${rehashed.join(", ")}); any approval you gave them is now stale`);
+    log.detail("re-approve in the Codex TUI (/hooks) or Codex will skip them — it hashes the handler, timeout included");
+  } else {
+    log.detail("Codex asks once to trust new hooks; approve it to enable session context injection");
+  }
+  return rehashed;
 }
 
 function seedGoatRoot(targets: SetupTargets): void {

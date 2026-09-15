@@ -2,6 +2,20 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Found by studying [ponytail](https://github.com/DietrichGebert/ponytail)'s hook runtime and install scripts. Every item was reproduced against the shipped build before it was fixed.
+
+### Fixed
+
+- **`goat uninstall` deleted a `hooks.json` it could not parse, and `goat setup` rewrote one.** Both destroyed hooks belonging to other tools, and uninstall reported it as "contained only goat hooks". The cause was shared: `readJson(file, null)` cannot tell "absent" from "unreadable". A new `readJsonFile` returns `missing | invalid | ok`, and both callers now refuse to write to a file they cannot read, naming the file and the parse error.
+- **`goat doctor` reported trusted hooks as untrusted on Windows.** Codex writes a user-scope trust key as a TOML *literal* string (`[hooks.state.'C:\Users\…\hooks.json:session_start:0:0']`) because the path is full of backslashes, while plugin keys come out double-quoted. The parser matched only the double-quoted form, so every Windows user was told their hooks would be silently skipped when Codex was running them.
+- **A changed hook definition silently invalidates Codex's trust approval, and goat now says so.** Codex hashes the normalized handler — command, matcher, timeout, `async`, `statusMessage` — and only `Trusted` or `Managed` handlers ever run; a changed one becomes `Modified` and is dropped without a word. Adding a timeout below is exactly such a change. `goat setup` now reports which definitions changed and tells you to re-approve in `/hooks`, and because npm buffers a lifecycle script's stderr, that notice is threaded into the postinstall report that prints to stdout and into the first-launch message. `goat doctor` no longer claims "trusted": it says trust records are present and that it checks their existence, not that their hash still matches.
+- **Every hook declares `timeout: 10`.** Codex defaults an omitted timeout to **600 seconds** (`timeout_sec.unwrap_or(600)`), so a hung goat hook would have held the turn for ten minutes. This affects the two synchronous hooks; `Stop` already declared 15. Ten seconds is generous for local file reads plus one `git status` that caps itself at five, and a timed-out hook only loses its injected context. A bundle check pins it.
+- **Both runtimes strip a leading byte-order mark before parsing JSON.** A `.goat/config.json` saved by a Windows editor was silently ignored, so `memory.enabled: false` did nothing.
+
+**Upgrading:** this release changes the two synchronous hook definitions, so Codex will treat any approval you already gave them as stale. Re-approve in the Codex TUI with `/hooks` after upgrading, or `goat doctor` will show them as not trusted.
+
 ## [0.1.7] — 2026-09-15
 
 ### Changed

@@ -15,8 +15,13 @@ try {
   const { runPostinstall, formatPostinstallReport } = await import("../dist/setup/postinstall.js");
   const { performSetup } = await import("../dist/cli/commands/setup.js");
   const report = await runPostinstall(process.env, undefined, () => {
-    const targets = performSetup("user", { force: false, quiet: true });
-    return `skills, AGENTS guidance and hooks installed for this user (${targets.skillsRoot}); Codex will ask once to trust the hooks`;
+    const { targets, rehashedHooks } = performSetup("user", { force: false, quiet: true });
+    const base = `skills, AGENTS guidance and hooks installed for this user (${targets.skillsRoot})`;
+    // npm buffers a lifecycle script's stderr, so a warning logged inside setup would be
+    // invisible here. This string reaches stdout through formatPostinstallReport.
+    return rehashedHooks.length > 0
+      ? `${base}; hook definitions changed (${rehashedHooks.join(", ")}) — RE-APPROVE them in the Codex TUI (/hooks) or Codex will skip them`
+      : `${base}; Codex will ask once to trust the hooks`;
   });
   write(formatPostinstallReport(report));
 } catch (error) {

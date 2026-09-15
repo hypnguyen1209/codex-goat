@@ -63,9 +63,13 @@ export function trustedHookKeys(configToml: string): Set<string> {
   let current: string | null = null;
   for (const raw of configToml.split(/\r?\n/)) {
     const line = raw.trim();
-    const header = line.match(/^\[hooks\.state\."(.+)"\]$/);
-    if (header?.[1]) {
-      current = header[1];
+    // TOML has two quoted-key forms and Codex uses both: a basic string ("…", backslashes
+    // escaped) for plugin keys, and a literal string ('…', no escapes) for Windows paths,
+    // which is what a user-scope `C:\Users\…\hooks.json` key actually looks like. Matching
+    // only the double-quoted form reported every Windows user's trusted hooks as untrusted.
+    const header = line.match(/^\[hooks\.state\.(?:"(.+)"|'(.+)')\]$/);
+    if (header) {
+      current = header[1] ?? header[2] ?? null;
       continue;
     }
     if (line.startsWith("[")) {

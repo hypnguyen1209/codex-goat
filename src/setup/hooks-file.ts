@@ -93,6 +93,30 @@ export function goatHookGroup(command: string, event: GoatHookEvent): HookMatche
   return group;
 }
 
+/**
+ * Which goat hook definitions this install would change, out of those already present.
+ *
+ * Codex hashes the NORMALIZED handler — command, matcher, timeout, async, statusMessage —
+ * and stores that hash when the user approves it (`hook_hash`,
+ * codex-rs/hooks/src/engine/discovery.rs). Change any of those fields and the stored hash
+ * no longer matches, the handler becomes `Modified`, and Codex drops it silently: only
+ * `Trusted` and `Managed` handlers ever run. So an upgrade that edits a hook definition
+ * disables goat on every machine that had already approved it, with nothing said.
+ *
+ * This compares shapes rather than recomputing the hash. The hash is sha256 over canonical
+ * TOML of a serde identity; a second implementation here would drift from Codex's and the
+ * drift would be invisible. Shape inequality is the signal that matters: if the definition
+ * changed at all, the stored approval is stale.
+ */
+export function changedGoatHooks(existing: HooksFile | null, next: HooksFile): GoatHookEvent[] {
+  return GOAT_HOOK_EVENTS.filter((event) => {
+    const before = (existing?.hooks?.[event] ?? []).find(isGoatHookGroup);
+    if (!before) return false; // newly registered: the user has not approved anything yet
+    const after = (next.hooks?.[event] ?? []).find(isGoatHookGroup);
+    return JSON.stringify(before) !== JSON.stringify(after);
+  });
+}
+
 export function installHooks(existing: HooksFile | null, command: string): HooksFile {
   // Copy only the keys Codex accepts. An unknown key is dropped rather than forwarded;
   // `unsupportedTopLevelKeys` lets the caller tell the user what was removed and why.
