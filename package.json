@@ -26,6 +26,7 @@
     "setup": "node dist/cli/goat.js setup",
     "doctor": "node dist/cli/goat.js doctor",
     "prepack": "npm run build",
+    "postinstall": "node scripts/postinstall.mjs",
     "docs:unwrap": "node scripts/unwrap-markdown.mjs README.md CHANGELOG.md AGENTS.md"
   },
   "files": [

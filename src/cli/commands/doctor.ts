@@ -285,11 +285,20 @@ function checkStateRoot(cwd: string): Check {
 
 function checkNative(): Check {
   const binary = nativeRuntimeBinary();
-  return binary
-    ? { name: "native runtime", level: "pass", detail: `${binary} (fast hook path)` }
-    : {
-        name: "native runtime",
-        level: "warn",
-        detail: "goat-runtime not built; hooks fall back to Node (`npm run build:native` to speed them up)",
-      };
+  if (binary) return { name: "native runtime", level: "pass", detail: `${binary} (fast hook path)` };
+  // npm hides postinstall output by default, so the reason the fetch did not happen is the
+  // most useful thing this line can carry: "no release yet" and "checksum mismatch" call
+  // for different actions.
+  const report = readJson<{ native?: { status?: string; detail?: string }; plan?: { reasons?: string[] } } | null>(
+    join(packageRoot(), "bin", ".postinstall.json"),
+    null,
+  );
+  const why = report?.native?.detail ?? report?.plan?.reasons?.find((reason) => /native/.test(reason)) ?? null;
+  return {
+    name: "native runtime",
+    level: "warn",
+    detail: why
+      ? `not installed: ${why}. Hooks fall back to Node. Re-run \`npm install -g codex-goat\`, or set GOAT_RUNTIME_BIN`
+      : "goat-runtime not present; hooks fall back to Node (`npm install -g codex-goat` fetches it, `npm run build:native` builds it)",
+  };
 }

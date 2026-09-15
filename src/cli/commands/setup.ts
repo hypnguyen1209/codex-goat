@@ -12,7 +12,7 @@ import {
   projectSkillsRoot,
   userSkillsRoot,
 } from "../../core/paths.js";
-import { mergeAgentsSection } from "../../setup/agents-md.js";
+import { hasAgentsSection, mergeAgentsSection } from "../../setup/agents-md.js";
 import { type HooksFile, installHooks, unsupportedTopLevelKeys } from "../../setup/hooks-file.js";
 import type { ParsedArgs } from "../args.js";
 import { flagBool, flagString } from "../args.js";
@@ -53,23 +53,47 @@ export function runSetup(parsed: ParsedArgs, cwd: string = process.cwd()): numbe
     throw new GoatError(`Unknown --scope '${scopeFlag}'.`, "Use --scope user or --scope project.");
   }
   const force = flagBool(parsed.flags, "force");
-  const targets = resolveTargets(scopeFlag, cwd);
+  const targets = performSetup(scopeFlag, { force, cwd });
+  log.detail("next: `goat doctor`, then `goat --madmax --xhigh` from your project");
+  return 0;
+}
 
-  log.info(`installing codex-goat (${targets.scope} scope)`);
+/**
+ * The whole install for one scope: skills, role references, the AGENTS block, the hook
+ * registrations, and the seeded `.goat/`. Idempotent and marker-based, so npm's
+ * postinstall and the first `goat` launch can call it as freely as `goat setup` does.
+ */
+export function performSetup(scope: Scope, options: { force?: boolean; cwd?: string; quiet?: boolean } = {}): SetupTargets {
+  const targets = resolveTargets(scope, options.cwd ?? process.cwd());
+  if (!options.quiet) log.info(`installing codex-goat (${targets.scope} scope)`);
 
-  installSkills(targets, force);
+  installSkills(targets, options.force ?? false);
   installRoleReferences(targets);
   installAgentsGuidance(targets);
   installHookRegistrations(targets);
   seedGoatRoot(targets);
 
-  log.ok("setup complete");
-  log.detail(`skills   -> ${targets.skillsRoot}`);
-  log.detail(`AGENTS   -> ${targets.agentsFile}`);
-  log.detail(`hooks    -> ${targets.hooksFile}`);
-  log.detail(`state    -> ${targets.goatRoot}`);
-  log.detail("next: `goat doctor`, then `goat --madmax --xhigh` from your project");
-  return 0;
+  if (!options.quiet) {
+    log.ok("setup complete");
+    log.detail(`skills   -> ${targets.skillsRoot}`);
+    log.detail(`AGENTS   -> ${targets.agentsFile}`);
+    log.detail(`hooks    -> ${targets.hooksFile}`);
+    log.detail(`state    -> ${targets.goatRoot}`);
+  }
+  return targets;
+}
+
+/**
+ * Has the user-scope install happened on this machine? Checked by the first `goat`
+ * launch so that an install where postinstall could not run still ends up complete.
+ * Both halves must be present: skills without the AGENTS block is the half-install
+ * that a `--ignore-scripts` upgrade or a hand-copied skills directory leaves behind.
+ */
+export function isUserScopeInstalled(): boolean {
+  const targets = resolveTargets("user");
+  if (!existsSync(join(targets.skillsRoot, "plan", "SKILL.md"))) return false;
+  if (!existsSync(targets.agentsFile)) return false;
+  return hasAgentsSection(readFileSync(targets.agentsFile, "utf8"));
 }
 
 /** Copy every bundled skill. Existing non-goat skills with the same name are left alone. */

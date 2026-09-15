@@ -28,16 +28,23 @@ codex-goat does not replace Codex, wrap its model calls, or fork its source. It 
 Requires Node 20+ and a Codex CLI that is already installed and authenticated — codex-goat drives `codex`, it does not replace it.
 
 ```bash
-codex --version                  # must already work
 npm install -g codex-goat
-
-cd your-project
-goat setup --scope project
-goat doctor
-goat exec "Reply with exactly GOAT-OK"
 ```
 
-`goat doctor` checks the install shape. `goat exec` is the real smoke test — it forces Codex to authenticate and complete a model call. A green doctor with a failing exec means an auth or profile problem, not an install problem.
+That is the whole install. The package's `postinstall` does two things, both best-effort and both reported by `goat doctor`:
+
+1. **Fetches the native runtime** for your platform from the matching GitHub release, verifies it against the release's `checksums.txt`, smoke-tests it, and installs it as `bin/goat-runtime` inside the package. Without it the hooks run on Node, which works and is only slower.
+2. **Runs the user-scope setup** — skills into `~/.agents/skills`, the operating rules into `~/.codex/AGENTS.md`, the three hooks into `~/.codex/hooks.json` — so every project you open in Codex has `$plan`, `$ultragoal`, `$team`, `$code-review` and `$ultraqa`. Codex asks once to trust the hooks on the next launch.
+
+Setup is skipped, with a reason, under `sudo` (HOME would be root's), in CI, when installed as a project dependency, or with `GOAT_SKIP_SETUP=1`; the native fetch is skipped with `GOAT_SKIP_NATIVE=1`, and `GOAT_SKIP_POSTINSTALL=1` skips both. Whatever postinstall could not do, the first real `goat` launch finishes: it runs the user-scope setup if it is missing and fetches the native runtime once per version, so `--ignore-scripts`, package managers that skip lifecycle scripts, and npm's own script gating still end in the same place. Recent npm prints `npm warn install-scripts … not yet covered by allowScripts` for any package with a postinstall; the script still runs today, and if a future npm blocks it, `goat` finishes the job on first launch (`npm install -g --allow-scripts=codex-goat codex-goat` runs it at install time).
+
+```bash
+goat doctor                            # what got installed, and what Codex will actually run
+goat exec "Reply with exactly GOAT-OK" # the real smoke test: Codex authenticates and answers
+cd your-project && goat                # a stronger Codex session, from a project
+```
+
+`goat doctor` checks the install shape, including whether Codex has trusted the hooks. `goat exec` forces Codex to authenticate and complete a model call. A green doctor with a failing exec means an auth or profile problem, not an install problem. Per-project installs (`goat setup --scope project`) still exist for repos that should carry their own copy.
 
 <details>
 <summary><strong>Other ways to install</strong></summary>
@@ -52,9 +59,10 @@ npx codex-goat doctor
 Upgrade, check, and remove:
 
 ```bash
-npm install -g codex-goat@latest   # upgrade; re-run `goat setup` to refresh skills and hooks
+npm install -g codex-goat@latest   # upgrade; postinstall refreshes the runtime, skills, and hooks
 npm view codex-goat version        # what the registry has
-goat uninstall --scope project     # removes skills, AGENTS block, and hooks; keeps .goat/
+goat uninstall --scope user        # removes the user-scope skills, AGENTS block, and hooks; keeps ~/.goat/
+goat uninstall --scope project     # same for a per-project install
 npm uninstall -g codex-goat
 ```
 
@@ -365,7 +373,9 @@ Three properties hold for every hook, and are covered by tests in both implement
 
 `crates/goat-runtime` is an optional dependency-free Rust binary that handles `SessionStart` and `Stop` in a few milliseconds instead of paying Node's startup cost.
 
-Every release attaches prebuilt binaries for linux-x64, linux-arm64, darwin-x64, darwin-arm64, and windows-x64, with a `checksums.txt`. Download one from [Releases](https://github.com/hypnguyen1209/codex-goat/releases), then either drop it next to the installed package as `bin/goat-runtime` or point at it:
+`npm install -g codex-goat` fetches it for you: every release publishes a raw binary per platform (linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64) beside the archives, with a `checksums.txt`, and the package's postinstall downloads the one for your platform, checks its SHA-256, runs it once against garbage input to see it answer `{}`, and installs it as `bin/goat-runtime`. If any of that cannot happen — no release for this version yet, offline, an unsupported platform — the hooks run on Node and `goat doctor` says why.
+
+To place a binary by hand instead, download one from [Releases](https://github.com/hypnguyen1209/codex-goat/releases) and either drop it next to the installed package as `bin/goat-runtime` or point at it:
 
 ```bash
 export GOAT_RUNTIME_BIN=/path/to/goat-runtime

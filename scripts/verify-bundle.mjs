@@ -95,6 +95,20 @@ for (const name of skillNames) {
   check("team skill degrades without spawn_agent", /If `spawn_agent` is not available/.test(team), "$team must still work serially");
 }
 
+// --- one-command install ----------------------------------------------------------------
+// `npm install -g codex-goat` must be the whole install: postinstall fetches the native
+// runtime and runs the user-scope setup. The script ships under scripts/ and imports from
+// dist/, so both must be in the package; and the release must publish the raw binaries the
+// fetcher expects, with the count guard that would catch a platform silently dropping out.
+{
+  const pkgScripts = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts ?? {};
+  check("postinstall wired", pkgScripts.postinstall === "node scripts/postinstall.mjs", `postinstall is '${pkgScripts.postinstall}'`);
+  check("postinstall script shipped", existsSync(join(root, "scripts", "postinstall.mjs")), "scripts/postinstall.mjs missing");
+  const release = readFileSync(join(root, ".github", "workflows", "release.yml"), "utf8");
+  check("release publishes raw runtime binaries", /RAW="goat-runtime-\$\{VERSION\}-\$\{\{ matrix\.name \}\}\$\{\{ matrix\.ext \}\}"/.test(release), "release.yml no longer stages the raw binary the postinstall fetcher downloads");
+  check("release asset count guard is 10", /-eq 10 \]/.test(release), "5 archives + 5 raw binaries must be checksummed");
+}
+
 // --- stages have skills -----------------------------------------------------
 const stagesSource = readFileSync(join(root, "src", "state", "stages.ts"), "utf8");
 const stageBlock = stagesSource.match(/export const STAGE_IDS = \[([\s\S]*?)\] as const;/);

@@ -6,6 +6,8 @@ import { compareVersions, parseCodexVersion, resolveRouteModel, routeFor } from 
 import { normalizeStageId, STAGE_IDS } from "../state/stages.js";
 import type { ParsedArgs } from "./args.js";
 import { flagBool, flagString } from "./args.js";
+import { isUserScopeInstalled, performSetup } from "./commands/setup.js";
+import { ensureNativeRuntimeOnce } from "../setup/postinstall.js";
 
 /**
  * `goat` with no subcommand launches Codex with stronger defaults.
@@ -209,6 +211,21 @@ export async function launch(parsed: ParsedArgs): Promise<number> {
     log.out([plan.binary, ...plan.args].map(shellQuote).join(" "));
     return 0;
   }
+
+  // One command is the whole install. npm's postinstall normally does this, but it is
+  // skipped under --ignore-scripts, sudo, CI, and by package managers that do not run
+  // it — so the first real launch finishes the job. Idempotent, marker-based, and undone
+  // by `goat uninstall --scope user`.
+  if (process.env.GOAT_SKIP_SETUP !== "1" && !isUserScopeInstalled()) {
+    log.info("first launch: installing codex-goat for this user (skills, AGENTS guidance, hooks)");
+    performSetup("user", { force: false, quiet: true });
+    log.detail("done; Codex will ask once to trust the hooks. `goat uninstall --scope user` removes all of it");
+  }
+  // Same net for the native runtime: npm gates global install scripts behind
+  // --allow-scripts, so postinstall may never have run. Tried once per version.
+  const native = await ensureNativeRuntimeOnce();
+  if (native?.status === "installed") log.detail(`native hook runtime installed (${native.detail})`);
+  else if (native?.status === "failed") log.detail(`native hook runtime not installed: ${native.detail}`);
 
   ensureDir(goatPaths(cwd).root);
   for (const note of plan.notes) log.detail(note);

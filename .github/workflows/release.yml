@@ -185,6 +185,12 @@ jobs:
           Verify with: goat doctor   (the "native runtime" check should read PASS)
           EOF
           echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
+          # The raw binary is published beside the archive so `npm install` can fetch it
+          # with one GET and a SHA-256 — no tar or zip parser in the postinstall script
+          # (src/setup/native-runtime.ts). Same name as the archive minus the extension.
+          RAW="goat-runtime-${VERSION}-${{ matrix.name }}${{ matrix.ext }}"
+          cp "target/${{ matrix.target }}/release/goat-runtime${{ matrix.ext }}" "${RAW}"
+          echo "RAW=${RAW}" >> "$GITHUB_ENV"
 
       - name: Archive
         shell: bash
@@ -200,7 +206,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: goat-runtime-${{ matrix.name }}
-          path: ${{ env.ARCHIVE }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.RAW }}
 
   release:
     needs: [publish, build-native]
@@ -228,9 +236,14 @@ jobs:
           for f in goat-runtime-*; do
             grep -q "  ${f}\$" checksums.txt || { echo "::error::${f} missing from checksums.txt"; status=1; }
           done
-          # Five platforms in the matrix; a silently missing one is the failure this catches.
+          # Five platforms in the matrix, an archive and a raw binary each; a silently
+          # missing one is the failure this catches. The raw binaries are what
+          # `npm install` fetches (src/setup/native-runtime.ts).
           count=$(ls goat-runtime-* | wc -l)
-          [ "$count" -eq 5 ] || { echo "::error::expected 5 archives, found ${count}"; status=1; }
+          [ "$count" -eq 10 ] || { echo "::error::expected 10 assets (5 archives + 5 raw binaries), found ${count}"; status=1; }
+          for f in goat-runtime-*; do
+            case "$f" in *.tar.gz|*.zip) ;; *) test -s "$f" || { echo "::error::raw binary ${f} is empty"; status=1; } ;; esac
+          done
           exit "${status}"
 
       - uses: softprops/action-gh-release@v2
