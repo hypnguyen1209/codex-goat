@@ -2,6 +2,19 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Two decisions taken after re-auditing the Codex source at v0.155.0-alpha (1,803 commits past the 0.147.0 that was installed here). Both are implemented version-aware, because the Codex that ships them is newer than the one most installs have today.
+
+### Changed
+
+- **`$clarify`, `$plan` and `$code-review` route to `gpt-6-astra`.** Codex's catalog now ranks Astra priority 1, which makes it the default for a fresh install; sol moved to 6, terra 7, luna 8. Astra's entry carries `minimal_client_version = 0.153.0` and the server refuses it to older clients, so the route carries the same gate: `goat` reads `codex --version` once, launches `gpt-5.6-sol` below 0.153.0, and says so in the launch notes. `goat doctor` lists which routes are gated on your install, and `goat skills` shows the fallback next to each route. `GOAT_CODEX_VERSION` overrides the probe. Astra has not been benchmarked here; the README says so.
+- **goat's own `--worktree` is retired; the flag is forwarded to Codex.** Codex grew managed worktrees (`--worktree`, a boolean, checkouts under `~/.codex/worktrees`, on by default), so goat's `../<repo>.goat-worktrees/<name>` implementation was a second, incompatible one under the same flag — and `goat exec --worktree --ephemeral` had started to hard-fail because Codex rejects that pair. `--worktree` now reaches Codex untouched. **Breaking:** `--worktree=<name>` and `-w <name>` are no longer accepted by goat; Codex's flag takes no name. Codex accepts `--worktree` from 0.155.0, and goat's launch notes warn when the installed Codex predates it. Existing `.goat-worktrees` checkouts are untouched; remove them with `git worktree remove` when done.
+
+### Fixed
+
+- `routing.ts`, the README and this changelog claimed Codex ranks sol at priority 0 and luna at 2. The catalog says 6 and 8, with Astra at 1. The rationale now cites the file it comes from.
+
 ## [0.1.5] — 2026-09-03
 
 An optimization audit that mostly found correctness bugs. The headline measurement is that Codex gives the whole skill catalog one character budget and splits it across every installed skill, cutting each description by prefix — so what a description is worth depends on how many *other* skills the user has, which this repo cannot see from its own files.

@@ -1,10 +1,8 @@
-import { existsSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
 import { ensureDir } from "../core/fsx.js";
 import { GoatError, log } from "../core/log.js";
-import { findProjectRoot, goatPaths } from "../core/paths.js";
+import { goatPaths } from "../core/paths.js";
 import { runCapture, runInherit, which } from "../core/proc.js";
-import { routeFor } from "../state/routing.js";
+import { compareVersions, parseCodexVersion, resolveRouteModel, routeFor } from "../state/routing.js";
 import { normalizeStageId, STAGE_IDS } from "../state/stages.js";
 import type { ParsedArgs } from "./args.js";
 import { flagBool, flagString } from "./args.js";
@@ -26,22 +24,20 @@ export interface LaunchPlan {
   notes: string[];
 }
 
-/** Long flags goat consumes rather than forwarding. */
-const CONSUMED = new Set([
-  "madmax",
-  "xhigh",
-  "high",
-  "medium",
-  "low",
-  "worktree",
-  "no-goat-defaults",
-  "print-argv",
-  "effort",
-  "for",
-]);
+/**
+ * Long flags goat consumes rather than forwarding.
+ *
+ * `--worktree` is deliberately absent. Codex grew its own managed worktrees (`--worktree`,
+ * a boolean, checkouts under `~/.codex/worktrees`), so goat's `../<repo>.goat-worktrees`
+ * implementation was retired after 0.1.5 and the flag now reaches Codex untouched.
+ */
+const CONSUMED = new Set(["madmax", "xhigh", "high", "medium", "low", "no-goat-defaults", "print-argv", "effort", "for"]);
 
-/** Goat flags that swallow the following token (`--effort high`, `-w feat/x`). */
-const CONSUMED_WITH_VALUE = new Set(["effort", "worktree", "w", "for"]);
+/** Goat flags that swallow the following token (`--effort high`). */
+const CONSUMED_WITH_VALUE = new Set(["effort", "for"]);
+
+/** First Codex release whose CLI accepts `--worktree`. Older ones reject it as unknown. */
+const NATIVE_WORKTREE_MIN_CODEX = "0.155.0";
 
 export function buildLaunchPlan(parsed: ParsedArgs, cwd: string = process.cwd()): LaunchPlan {
   const notes: string[] = [];
@@ -68,8 +64,13 @@ export function buildLaunchPlan(parsed: ParsedArgs, cwd: string = process.cwd())
   // An explicit -m/--model always wins; routing only fills a gap the user left.
   const explicitModel = parsed.raw.some((token) => token === "-m" || token === "--model" || token.startsWith("--model="));
   if (stage && route.model && !explicitModel && useDefaults) {
-    args.push("-m", route.model);
-    notes.push(`$${stage} routed to ${route.model}`);
+    // Only routes that name a minimum version pay for the version probe.
+    const resolved = resolveRouteModel(route, route.minCodex ? codexVersion() : null);
+    if (resolved) {
+      args.push("-m", resolved.model);
+      notes.push(`$${stage} routed to ${resolved.model}`);
+      if (resolved.note) notes.push(resolved.note);
+    }
   } else if (stage && explicitModel) {
     notes.push(`$${stage}: keeping your explicit --model over the route`);
   }
@@ -81,7 +82,18 @@ export function buildLaunchPlan(parsed: ParsedArgs, cwd: string = process.cwd())
 
   // Forward everything goat does not own, in the order the user typed it. Re-deriving
   // from the parsed flag map would reorder `-m gpt-5` relative to a positional prompt.
-  args.push(...forwardedTokens(parsed.raw));
+  const forwarded = forwardedTokens(parsed.raw);
+  args.push(...forwarded);
+
+  if (forwarded.some((token) => token === "--worktree" || token.startsWith("--worktree="))) {
+    const installed = codexVersion();
+    if (installed === null || compareVersions(installed, NATIVE_WORKTREE_MIN_CODEX) < 0) {
+      notes.push(
+        `--worktree is Codex's native flag since ${NATIVE_WORKTREE_MIN_CODEX}` +
+          `${installed ? ` (installed ${installed})` : ""}; this Codex will reject it. goat's own worktrees were retired after 0.1.5.`,
+      );
+    }
+  }
 
   return { binary: codexBinary(), args, cwd, notes };
 }
@@ -114,14 +126,6 @@ export function forwardedTokens(argv: readonly string[]): string[] {
       }
       out.push(token);
       continue;
-    }
-
-    if (token.startsWith("-") && token.length > 1) {
-      const name = token.slice(1);
-      if (CONSUMED_WITH_VALUE.has(name)) {
-        if (isValue(argv[index + 1])) index += 1;
-        continue;
-      }
     }
 
     out.push(token);
@@ -167,16 +171,26 @@ export function codexBinary(): string {
   return "codex";
 }
 
+let probedVersion: string | null | undefined;
+
+/**
+ * The installed Codex version, e.g. `0.154.0`, or null when it cannot be read.
+ *
+ * Probed once per process. `GOAT_CODEX_VERSION` overrides the probe, which is how tests
+ * pin a version and how a user with an unusual `codex` shim can tell goat what it is.
+ */
+export function codexVersion(): string | null {
+  const pinned = process.env.GOAT_CODEX_VERSION?.trim();
+  if (pinned) return parseCodexVersion(pinned);
+  if (probedVersion !== undefined) return probedVersion;
+  const result = runCapture(codexBinary(), ["--version"], { timeoutMs: 15_000 });
+  probedVersion = result.code === 0 ? parseCodexVersion(result.stdout) : null;
+  return probedVersion;
+}
+
 export async function launch(parsed: ParsedArgs): Promise<number> {
-  let cwd = process.cwd();
+  const cwd = process.cwd();
   const dryRun = flagBool(parsed.flags, "print-argv");
-
-  const worktree = parsed.flags.get("worktree") ?? parsed.flags.get("w");
-  // `--print-argv` is a dry run, so it must not create a worktree as a side effect.
-  if (worktree !== undefined && !dryRun) {
-    cwd = ensureWorktree(worktree === true ? null : worktree, cwd);
-  }
-
   const plan = buildLaunchPlan(parsed, cwd);
 
   if (dryRun) {
@@ -192,43 +206,4 @@ export async function launch(parsed: ParsedArgs): Promise<number> {
 /** Quote for display only, so `--print-argv` output can be pasted into a shell. */
 function shellQuote(token: string): string {
   return /^[\w@%+=:,./-]+$/.test(token) ? token : `'${token.replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * Create or reuse `../<repo>.goat-worktrees/<name>`.
- *
- * A named worktree is the safe way to run `--madmax`, and the only sane way to run more
- * than one aggressive session against the same repository at once.
- */
-export function ensureWorktree(name: string | null, cwd: string): string {
-  const root = findProjectRoot(cwd);
-  if (!existsSync(join(root, ".git"))) {
-    throw new GoatError("--worktree requires a git repository.", "Run without --worktree, or `git init` first.");
-  }
-
-  const branch = name ?? "goat-detached";
-  const safe = branch.replace(/[^\w.-]+/g, "-");
-  const parent = resolve(root, "..", `${basename(root)}.goat-worktrees`);
-  const target = join(parent, safe);
-
-  if (existsSync(target)) {
-    log.detail(`reusing worktree ${target}`);
-    return target;
-  }
-
-  ensureDir(parent);
-  const branchExists = runCapture("git", ["rev-parse", "--verify", branch], { cwd: root }).code === 0;
-  const args = branchExists
-    ? ["worktree", "add", target, branch]
-    : ["worktree", "add", "-b", branch, target];
-
-  const result = runCapture("git", args, { cwd: root, timeoutMs: 60_000 });
-  if (result.code !== 0) {
-    throw new GoatError(
-      `git worktree add failed: ${result.stderr.trim() || result.stdout.trim()}`,
-      "Remove the stale worktree with `git worktree remove`, or pick a different --worktree name.",
-    );
-  }
-  log.ok(`worktree ready at ${target}`);
-  return target;
 }

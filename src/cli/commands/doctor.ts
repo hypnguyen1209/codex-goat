@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { readJson } from "../../core/fsx.js";
 import { color, log } from "../../core/log.js";
+import { allRoutes, compareVersions, parseCodexVersion } from "../../state/routing.js";
 import {
   bundledDir,
   codexHome,
@@ -79,14 +80,26 @@ function checkCodex(): Check {
   }
   const version = runCapture(path, ["--version"], { timeoutMs: 15_000 });
   const label = version.code === 0 ? version.stdout.trim() : "version probe failed";
-  return { name: "codex on PATH", level: version.code === 0 ? "pass" : "warn", detail: `${path} (${label})` };
+  // Routes that name a minimum Codex fall back below it (src/state/routing.ts). Say so
+  // here, because `goat --for plan` will quietly launch the fallback and only the launch
+  // notes mention it.
+  const installed = version.code === 0 ? parseCodexVersion(version.stdout) : null;
+  const gated = Object.entries(allRoutes())
+    .filter(([, route]) => route.minCodex && route.fallback && (installed === null || compareVersions(installed, route.minCodex) < 0))
+    .map(([stage, route]) => `$${stage} -> ${route.fallback} until codex >= ${route.minCodex} (routed ${route.model})`);
+  const gateNote = gated.length > 0 ? `; ${gated.join("; ")}` : "";
+  return {
+    name: "codex on PATH",
+    level: version.code === 0 ? "pass" : "warn",
+    detail: `${path} (${label})${gateNote}`,
+  };
 }
 
 function checkGit(): Check {
   const path = which("git");
   return path
     ? { name: "git available", level: "pass", detail: path }
-    : { name: "git available", level: "warn", detail: "git missing; --worktree and change detection are unavailable" };
+    : { name: "git available", level: "warn", detail: "git missing; change detection for $code-review is unavailable" };
 }
 
 function checkBundle(): Check {

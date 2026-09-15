@@ -14,7 +14,7 @@ ${color.bold("Launch flags")}
   --high | --xhigh | --medium | --low    reasoning effort (default: high)
   --effort <level>                       same, explicit form
   --madmax                               codex --dangerously-bypass-approvals-and-sandbox
-  --worktree[=<name>] | -w <name>        run inside a dedicated git worktree
+  --worktree                             forwarded to codex: its managed worktree (codex >= 0.155)
   --for <stage>                          launch the model that stage is routed to
   --no-goat-defaults                     forward argv to codex untouched
   --print-argv                           print the resolved codex command and exit
@@ -41,6 +41,6 @@ ${color.bold("A good first session")}
   goat setup --scope project
   goat doctor
   goat exec "Reply with exactly GOAT-OK"
-  goat --worktree=feat/task --madmax --xhigh
+  goat --madmax --xhigh
 `);
 }

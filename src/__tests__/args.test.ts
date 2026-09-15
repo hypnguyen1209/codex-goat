@@ -33,14 +33,16 @@ test("everything after -- is passthrough, even goat's own flags", () => {
 });
 
 test("short flags are captured without their dash", () => {
-  const parsed = parseArgs(["-w"]);
-  assert.equal(parsed.flags.get("w"), true);
+  const parsed = parseArgs(["-x"]);
+  assert.equal(parsed.flags.get("x"), true);
 });
 
-test("-w takes the following token as its value", () => {
+// `-w <name>` was goat's worktree flag until 0.1.5. It is nobody's now: the token after
+// it is an ordinary positional, so it reaches Codex exactly as typed.
+test("-w no longer swallows the following token", () => {
   const parsed = parseArgs(["-w", "feat/task"]);
-  assert.equal(flagString(parsed.flags, "w"), "feat/task");
-  assert.deepEqual(parsed.positionals, [], "the worktree name must not leak into the codex prompt");
+  assert.equal(parsed.flags.get("w"), true);
+  assert.deepEqual(parsed.positionals, ["feat/task"]);
 });
 
 // Regression: `--status` was once absent from VALUE_FLAGS, so `--status complete`
@@ -57,7 +59,6 @@ test("every flag the CLI reads by value is registered as a value flag", () => {
     [["setup", "--scope", "user"], "scope", "user"],
     [["exec", "--role", "reviewer", "prompt"], "role", "reviewer"],
     [["--effort", "xhigh"], "effort", "xhigh"],
-    [["--worktree", "feat/x"], "worktree", "feat/x"],
     [["--for", "plan"], "for", "plan"],
   ];
   for (const [argv, flag, expected] of cases) {

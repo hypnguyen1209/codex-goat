@@ -48,11 +48,14 @@ const VALUE_FLAGS = new Set([
   "stage",
   "status",
   "summary",
-  "worktree",
 ]);
 
-/** Short goat flags that take a value (`-w feat/task`). */
-const SHORT_VALUE_FLAGS = new Set(["w"]);
+/**
+ * Short goat flags that take a value. Empty after 0.1.5: `-w <name>` belonged to goat's
+ * retired worktree implementation. The mechanism stays so a future short flag cannot
+ * repeat the `--status` bug (a value flag parsed as a boolean).
+ */
+const SHORT_VALUE_FLAGS = new Set<string>([]);
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const flags = new Map<string, string | true>();

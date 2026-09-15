@@ -16,7 +16,10 @@ export function runSkills(parsed: ParsedArgs): number {
     log.detail(`requires: ${spec.requires.length > 0 ? spec.requires.join(", ") : "nothing"}`);
     log.detail(`produces: ${spec.produces}`);
     const route = routeFor(id);
-    if (route.model) log.detail(`goat --for ${id} -> ${route.model}${route.effort ? ` (${route.effort})` : ""}`);
+    if (route.model) {
+      const gate = route.minCodex && route.fallback ? `, ${route.fallback} below codex ${route.minCodex}` : "";
+      log.detail(`goat --for ${id} -> ${route.model}${route.effort ? ` (${route.effort})` : ""}${gate}`);
+    }
   }
 
   const bundled = listBundledSkills();

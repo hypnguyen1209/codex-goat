@@ -18,7 +18,7 @@ npm install -g codex-goat
 
 codex-goat does not replace Codex, wrap its model calls, or fork its source. It keeps Codex as the execution engine and makes it easier to:
 
-- **start a stronger Codex session by default** — `goat` launches `codex` with raised reasoning effort, optional worktree isolation, and project guidance already loaded
+- **start a stronger Codex session by default** — `goat` launches `codex` with raised reasoning effort, per-stage model routing, and project guidance already loaded
 - **run one consistent workflow from clarification to completion** — six stages that share a state directory, an evidence ledger, and one set of operating rules
 - **invoke that workflow with `$plan`, `$ultragoal`, `$team`, `$code-review`, and `$ultraqa` — each independently, no fixed chain**
 - **keep plans, goals, reviews, and state in `.goat/`**, surviving compaction and restarts
@@ -71,7 +71,7 @@ npm view codex-goat dist.attestations
 Then work normally:
 
 ```bash
-goat --worktree=feat/checkout --madmax --xhigh
+goat --madmax --xhigh
 ```
 
 Inside the session, invoke whichever stage the work actually needs:
@@ -300,7 +300,7 @@ goat [flags] [codex args...]           launch Codex with stronger defaults
   --high | --xhigh | --medium | --low  reasoning effort (default: high)
   --effort <level>                     the same, explicit
   --madmax                             codex --dangerously-bypass-approvals-and-sandbox
-  --worktree[=<name>] | -w <name>      run inside a dedicated git worktree
+  --worktree                           forwarded to codex: its managed worktree (codex >= 0.155)
   --no-goat-defaults                   forward argv to codex untouched
   --print-argv                         print the resolved codex command and exit
   --                                   everything after this goes to codex verbatim
@@ -436,12 +436,12 @@ flowchart LR
 
 The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
-## Model routing: plan on Sol, execute on Luna
+## Model routing: plan on Astra, execute on Luna
 
 A Codex session runs one model, so a stage cannot switch models mid-conversation. What makes per-stage routing work is that `.goat/` is durable: `$plan` writes an artifact, the session ends, and a new session on a different model picks it up through the same entry contract. The split is **across sessions**, not inside one — which is exactly what the entry-contract design was for.
 
 ```bash
-goat --for plan --madmax        # deliberation session  -> gpt-5.6-sol
+goat --for plan --madmax        # deliberation session  -> gpt-6-astra (gpt-5.6-sol below codex 0.153)
 #   $clarify / $plan / $code-review, writes .goat/plans/…
 
 goat --for ultragoal --madmax   # execution session     -> gpt-5.6-luna
@@ -450,16 +450,22 @@ goat --for ultragoal --madmax   # execution session     -> gpt-5.6-luna
 
 | Stage | Routed to | |
 | --- | --- | --- |
-| `$clarify`, `$plan`, `$code-review` | `gpt-5.6-sol` | deliberation and judgement |
+| `$clarify`, `$plan`, `$code-review` | `gpt-6-astra` | deliberation and judgement; `gpt-5.6-sol` on Codex older than 0.153.0 |
 | `$ultragoal`, `$team`, `$ultraqa` | `gpt-5.6-luna` | execution and throughput |
 
 `goat skills` prints the route for every stage, and `goat --for plan --print-argv` shows the exact `codex` command before you run it.
+
+### The version gate on Astra
+
+Astra's catalog entry carries `minimal_client_version = 0.153.0`, and the server refuses it to older clients with "requires a newer version of Codex". So `goat` reads `codex --version` once per launch and, below 0.153.0, launches `gpt-5.6-sol` for the three judgement stages instead — and says so in the launch notes, because a wrapper that silently swaps models is exactly what `--print-argv` exists to prevent. An unreadable version is treated as too old: launching a model that will be refused is a worse failure than launching the previous default. `goat doctor` reports which routes are currently gated on your install. Set `GOAT_CODEX_VERSION` to override the probe if your `codex` is an unusual shim.
+
+Astra has not been benchmarked here. The numbers below were measured on sol and luna.
 
 ### Why this split
 
 Two reasons, and it is worth being precise about which is measurement and which is not:
 
-- **Codex positions them this way.** Its model catalog ranks `gpt-5.6-sol` priority 0 and makes it the default; `gpt-5.6-luna` sits at priority 2. Codex also routes its *own* auxiliary work to luna — approval review, memory extraction, and guardian scoring all name it explicitly.
+- **Codex positions them this way.** Its model catalog (`codex-rs/models-manager/models.json`) ranks `gpt-6-astra` priority 1, which makes it the default for a fresh install; `gpt-5.6-sol`, the previous default, now sits at 6, `gpt-5.6-terra` at 7 and `gpt-5.6-luna` at 8. Codex also routes its *own* auxiliary work to luna — approval review, memory extraction, and guardian scoring all name it explicitly.
 - **Measured here:** luna finished faster in all six model × effort cells and carries a 1,558-token lighter always-on prefix.
 
 **Not measured: output quality.** Nothing in this repo grades correctness, and the task benchmark could not separate the two models on token use at all — per-task direction swung from −58% to +176%. Treat the defaults as a sensible starting point, not a proven optimum.
