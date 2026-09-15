@@ -118,7 +118,7 @@ flowchart TB
     user([You])
 
     subgraph goat["codex-goat"]
-        cli["goat CLI<br/>launch · setup · doctor · status<br/>contract · state · ledger"]
+        cli["goat CLI<br/>launch · setup · doctor · status<br/>contract · state · ledger · roles"]
         assets["skills/ · prompts/<br/>templates/AGENTS.md"]
         hook["hooks/goat-hook.mjs"]
         state[("<b>.goat/</b><br/>state.json · ledger.jsonl<br/>plans · goals · reviews · qa · memory")]
@@ -131,7 +131,7 @@ flowchart TB
 
     user -->|"goat --xhigh"| cli
     cli -->|"spawn, argv forwarded verbatim"| proc
-    cli -->|"goat setup writes"| assets
+    cli -->|"goat setup writes<br/>(postinstall and first launch run it)"| assets
     assets -->|".agents/skills · AGENTS.md · hooks.json"| proc
     proc --> model
     model -->|"SessionStart · UserPromptSubmit · Stop"| hook
@@ -187,7 +187,7 @@ codex-goat replaces the chain with **entry contracts**. Each stage declares what
 | --- | --- | --- |
 | `$clarify` | nothing | frozen requirements + a recorded objective |
 | `$plan` | an objective | plan with testable acceptance criteria |
-| `$ultragoal` | an objective + an approach | goal ledger with per-checkpoint evidence |
+| `$ultragoal` | an objective + an approach | goal ledger with per-checkpoint evidence, registered as a native Codex goal when the session offers one |
 | `$team` | an objective + 2+ independent lanes | one Codex sub-agent per lane, evidence recorded by the root, merged verification |
 | `$code-review` | a change | verified findings, most severe first |
 | `$ultraqa` | something runnable | scenario matrix and QA report |
@@ -323,6 +323,7 @@ goat contract [<stage>] [--json]
 goat state read|set|clear
 goat ledger read|evidence|note
 goat skills [--roles]
+goat roles install|uninstall|list [--scope user|project]
 goat hook
 goat uninstall [--scope ...] [--purge-state]
 ```
@@ -401,19 +402,20 @@ Five layers, strictly one-directional. The graph below is generated from the act
 
 ```mermaid
 flowchart TB
-    cli["<b>cli/</b> — 12 files<br/>argv · launch · setup · doctor<br/>status · contract · state · ledger"]
+    cli["<b>cli/</b> — 13 files<br/>argv · launch · setup · doctor · roles<br/>status · contract · state · ledger"]
     hooks["<b>hooks/</b> — 1 file<br/>the lifecycle handler"]
-    setup["<b>setup/</b> — 2 files<br/>AGENTS.md merge<br/>hooks.json merge"]
-    state["<b>state/</b> — 5 files<br/>stages · contract · store<br/>ledger · memory"]
+    setup["<b>setup/</b> — 6 files<br/>AGENTS.md merge · hooks.json merge<br/>hook trust · agent roles<br/>native runtime · postinstall"]
+    state["<b>state/</b> — 6 files<br/>stages · contract · store<br/>ledger · memory · routing"]
     core["<b>core/</b> — 4 files<br/>paths · atomic fs<br/>process · logging"]
 
-    cli -->|23| core
-    cli -->|12| state
-    cli -->|6| setup
+    cli -->|25| core
+    cli -->|18| state
+    cli -->|10| setup
     cli -->|1| hooks
     hooks -->|4| state
-    hooks -->|1| core
-    state -->|8| core
+    hooks -->|2| core
+    setup -->|2| core
+    state -->|10| core
 
     classDef top fill:#ddf4ff,stroke:#0969da,color:#24292f
     classDef mid fill:#fff8c5,stroke:#9a6700,color:#24292f
@@ -423,7 +425,7 @@ flowchart TB
     class core bot
 ```
 
-`core` imports nothing above it, `setup` imports nothing at all across layers — it is pure functions over data, which is why both merges are easy to test exhaustively. There are no cycles; the script reports them, so a future one fails visibly rather than quietly.
+`core` imports nothing above it. `setup` reaches only into `core`, and only for paths: the two merges and the trust-key computation are pure functions over data, which is why they are easy to test exhaustively, and the three installers that touch disk (agent roles, the native runtime fetch, postinstall) are the whole reason that edge exists. There are no cycles; the script reports them, so a future one fails visibly rather than quietly.
 
 Two entry points, and only two:
 
@@ -446,16 +448,17 @@ flowchart LR
 
     src -->|tsc| dist["dist/"]
     crates -->|cargo| bin["goat-runtime<br/>5 platforms"]
-    scripts -->|"81 contract checks"| assets
+    scripts -->|"97 contract checks"| assets
     dist --> pkg(["npm: codex-goat"])
     assets --> pkg
-    bin --> gh(["GitHub Release assets"])
+    bin --> gh(["GitHub Release assets<br/>5 archives + 5 raw binaries"])
+    gh -.->|"fetched by npm postinstall<br/>or the first goat launch"| pkg
 
     classDef opt stroke-dasharray: 4 3
     class crates,bin,gh opt
 ```
 
-The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
+The dashed path is optional: `goat-runtime` is a speed-up for two hooks, and everything works without it. `npm install -g codex-goat` fetches it for the current platform and verifies it against the release's checksums; when that cannot happen, the hooks run on Node. `skills/`, `prompts/`, and `templates/` are **data, not code** — Codex reads them directly, so they get their own contract test rather than type checking.
 
 ## Native Codex features the stages use
 
@@ -618,16 +621,18 @@ Raw samples are in `bench/results-*.json`, one row per call with Codex's usage o
 ├── goals/               goal ledgers and team lane assignments
 ├── reviews/             review reports
 ├── qa/                  QA reports and scenario matrices
-└── memory/              compressed session observations
+├── memory/              compressed session observations
+├── config.json          per-project routes and the memory switches
+└── SESSION.md           your notes for the next session; injected at SessionStart, capped at 4,000 chars
 ```
 
-`goat setup` also writes:
+`goat setup` also writes, and `npm install -g` or the first `goat` launch runs it for the user scope:
 
 - `<scope>/.agents/skills/` — the eight bundled skills plus the role cards
 - `AGENTS.md` — operating rules, merged between `<!-- GOAT:AGENTS:START/END -->` markers so the rest of your file is preserved byte-for-byte
 - `.codex/hooks.json` — lifecycle hooks, preserving any entries owned by other tools
 
-`goat uninstall` reverses all three and leaves `.goat/` alone unless you pass `--purge-state`.
+`goat roles install` adds `<config>/agents/<role>.toml`, one per role card, and only on request. `goat uninstall` reverses the three setup writes and leaves `.goat/` alone unless you pass `--purge-state`; `goat roles uninstall` removes exactly the role files goat generated.
 
 ## Development
 
@@ -637,8 +642,8 @@ npm run build            # TypeScript -> dist/
 npm run build:native     # optional Rust helper
 npm run build:bun        # optional single-file binary (bun build --compile)
 
-npm test                 # build + 84 unit tests + 81 bundle contract checks
-npm run test:native      # 18 Rust tests
+npm test                 # build + 164 unit tests + 97 bundle contract checks
+npm run test:native      # 28 Rust tests
 npm run verify           # lint + everything above
 ```
 
@@ -652,11 +657,11 @@ Pushing a `v*` tag runs the whole thing. The ordering is the point: `npm publish
 
 ```mermaid
 flowchart LR
-    tag(["git push origin v0.1.3"]) --> check
+    tag(["git push origin v0.1.7"]) --> check
 
     subgraph check["check"]
         direction TB
-        c1["lint · build<br/>84 unit · 81 contract"]
+        c1["lint · build<br/>164 unit · 97 contract"]
         c2["tag == package.json<br/>== marketplace pin"]
         c3["npm publish --dry-run"]
         c1 --> c2 --> c3
@@ -672,7 +677,7 @@ flowchart LR
     end
 
     build --> publish["publish<br/>npm publish --provenance"]
-    publish --> release["release<br/>checksums.txt + GitHub Release"]
+    publish --> release["release<br/>10 assets: 5 archives + 5 raw binaries<br/>checksums.txt + GitHub Release"]
     build --> release
 
     classDef irreversible fill:#ffebe9,stroke:#cf222e,color:#24292f
@@ -686,8 +691,8 @@ codex-goat/
 ├── src/
 │   ├── cli/             argv parsing, launch, and the goat subcommands
 │   ├── core/            paths, atomic filesystem writes, process, logging
-│   ├── state/           stage table, entry contracts, state store, ledger, memory
-│   ├── setup/           AGENTS.md merging, hooks.json merging
+│   ├── state/           stage table, entry contracts, state store, ledger, memory, model routing
+│   ├── setup/           AGENTS.md and hooks.json merging, hook trust, agent roles, native runtime fetch, postinstall
 │   └── hooks/           the lifecycle hook handler
 ├── skills/              the eight bundled skills
 ├── prompts/             the nine role cards (source of truth)
