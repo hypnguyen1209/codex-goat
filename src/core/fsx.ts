@@ -22,11 +22,45 @@ export function writeJsonAtomic(file: string, value: unknown): void {
   writeFileAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/**
+ * A byte-order mark makes `JSON.parse` throw, and Windows editors write one without
+ * saying so. Every JSON read here strips it first, so a file a user edited in Notepad
+ * is not mistaken for a corrupt one.
+ */
+export function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 export function readJson<T>(file: string, fallback: T): T {
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as T;
+    return JSON.parse(stripBom(readFileSync(file, "utf8"))) as T;
   } catch {
     return fallback;
+  }
+}
+
+/**
+ * Read JSON while keeping "not there" and "there but unreadable" apart.
+ *
+ * `readJson` collapses both into its fallback, which is right for a cache and wrong for a
+ * file another tool owns: `goat setup` rewrote an unparseable `hooks.json` from scratch
+ * and `goat uninstall` deleted one, reporting it as "contained only goat hooks". Both
+ * destroyed hooks belonging to other tools. Callers that write back to a shared file must
+ * use this and refuse to touch `invalid`.
+ */
+export type JsonRead<T> = { kind: "missing" } | { kind: "invalid"; reason: string } | { kind: "ok"; value: T };
+
+export function readJsonFile<T>(file: string): JsonRead<T> {
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return { kind: "missing" };
+  }
+  try {
+    return { kind: "ok", value: JSON.parse(stripBom(raw)) as T };
+  } catch (error) {
+    return { kind: "invalid", reason: (error as Error).message };
   }
 }
 

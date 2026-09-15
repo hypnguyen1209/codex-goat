@@ -55,6 +55,10 @@ impl Json {
 }
 
 pub fn parse(input: &str) -> Result<Json, String> {
+    // A byte-order mark is not whitespace and would fail the parse. Windows editors write
+    // one into a hand-edited `.goat/config.json` without saying so, and the result would
+    // be a silently ignored config. Mirrors `stripBom` in `src/core/fsx.ts`.
+    let input = input.strip_prefix('\u{feff}').unwrap_or(input);
     let bytes: Vec<char> = input.chars().collect();
     let mut parser = Parser { chars: &bytes, pos: 0 };
     parser.skip_whitespace();

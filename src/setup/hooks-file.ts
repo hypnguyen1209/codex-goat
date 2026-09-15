@@ -69,8 +69,17 @@ function isOwned(group: HookMatcherGroup): boolean {
 /** Ownership test shared with the trust report, which must key exactly the groups goat wrote. */
 export const isGoatHookGroup = isOwned;
 
+/**
+ * Every hook declares a timeout, because Codex's default for an omitted one is 600
+ * seconds (`timeout_sec.unwrap_or(600)`, codex-rs/hooks/src/engine/discovery.rs). A goat
+ * hook that hung would have held the turn for ten minutes. Ten seconds is generous for
+ * what these do — local file reads, and one `git status` that already caps itself at five
+ * — and a timed-out hook only loses its injected context, it never fails the turn.
+ */
+const SYNCHRONOUS_HOOK_TIMEOUT_SEC = 10;
+
 export function goatHookGroup(command: string, event: GoatHookEvent): HookMatcherGroup {
-  const hook: HookCommand = { type: "command", command };
+  const hook: HookCommand = { type: "command", command, timeout: SYNCHRONOUS_HOOK_TIMEOUT_SEC };
   if (event === "Stop") {
     // Stop runs after the model's last message; give it room to persist memory. It only
     // records an observation and never emits a decision, so nothing waits on its output:

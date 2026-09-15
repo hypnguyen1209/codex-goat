@@ -339,3 +339,25 @@ fn iso_timestamps_parse_and_diff() {
     assert_eq!(describe_age(5 * 3_600), "5 hours");
     assert_eq!(describe_age(14 * 86_400), "14 days");
 }
+
+/// A byte-order mark must not make a hand-edited config look corrupt. Mirrors the
+/// `stripBom` test in src/__tests__/hooks-safety.test.ts.
+#[test]
+fn a_byte_order_mark_does_not_break_parsing() {
+    assert!(goat_runtime::json::parse("\u{feff}{\"a\":1}").is_ok());
+    let dir = sandbox("bom-config");
+    fs::write(
+        dir.join(".goat").join("config.json"),
+        "\u{feff}{\"memory\":{\"enabled\":false}}",
+    )
+    .expect("write config");
+    let outcome = handle(
+        &payload("Stop", &dir, r#","last_assistant_message":"remember""#),
+        "2026-09-15T00:00:00Z",
+    );
+    assert_eq!(outcome, HookOutcome::Handled("{}".to_string()));
+    assert!(
+        !dir.join(".goat").join("memory").join("observations.jsonl").exists(),
+        "a BOM made memory.enabled=false unreadable, so the observation was recorded anyway"
+    );
+}

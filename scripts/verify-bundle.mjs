@@ -142,6 +142,22 @@ const hookEvents = Object.keys(hooksFile.hooks ?? {});
 for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
   check(`hook ${event} registered`, hookEvents.includes(event), "missing from hooks/hooks.json");
 }
+
+// --- shipped hooks declare a bounded timeout ---------------------------------------------
+// Codex defaults an omitted hook timeout to 600 seconds
+// (timeout_sec.unwrap_or(600), codex-rs/hooks/src/engine/discovery.rs), so a hook that hung
+// would hold the user's turn for ten minutes. The shipped plugin file and what `goat setup`
+// writes must agree, which is why both are checked.
+for (const [event, groups] of Object.entries(hooksFile.hooks ?? {})) {
+  for (const hook of groups.flatMap((group) => group.hooks ?? [])) {
+    check(
+      `hook ${event} declares a timeout`,
+      typeof hook.timeout === "number" && hook.timeout > 0 && hook.timeout <= 60,
+      `timeout is ${JSON.stringify(hook.timeout)}; Codex would wait 600s on a hung hook`,
+    );
+  }
+}
+
 check("hook script exists", existsSync(join(root, "hooks", "goat-hook.mjs")), "hooks/goat-hook.mjs is missing");
 
 const hookCommands = Object.values(hooksFile.hooks ?? {})

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { readJson, writeFileAtomic, writeJsonAtomic } from "../../core/fsx.js";
+import { readJsonFile, writeFileAtomic, writeJsonAtomic } from "../../core/fsx.js";
 import { GoatError, log } from "../../core/log.js";
 import { stripAgentsSection } from "../../setup/agents-md.js";
 import { type HooksFile, uninstallHooks } from "../../setup/hooks-file.js";
@@ -38,8 +38,14 @@ export function runUninstall(parsed: ParsedArgs, cwd: string = process.cwd()): n
     log.detail(`removed GOAT section from ${targets.agentsFile}`);
   }
 
-  if (existsSync(targets.hooksFile)) {
-    const next = uninstallHooks(readJson<HooksFile | null>(targets.hooksFile, null));
+  const hooks = readJsonFile<HooksFile>(targets.hooksFile);
+  if (hooks.kind === "invalid") {
+    // Deleting it would take another tool's hooks with it. Until 0.1.8 an unparseable
+    // file read as `null`, which `uninstallHooks` reports as "nothing but goat hooks".
+    log.warn(`left ${targets.hooksFile} untouched: it is not valid JSON (${hooks.reason})`);
+    log.detail("fix or remove that file by hand; goat will not rewrite a hooks file it cannot read");
+  } else if (hooks.kind === "ok") {
+    const next = uninstallHooks(hooks.value);
     if (next === null) {
       unlinkSync(targets.hooksFile);
       log.detail(`removed ${targets.hooksFile} (contained only goat hooks)`);

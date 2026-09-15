@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ensureDir, readJson, writeFileAtomic, writeJsonAtomic } from "../../core/fsx.js";
+import { ensureDir, readJsonFile, writeFileAtomic, writeJsonAtomic } from "../../core/fsx.js";
 import { GoatError, log } from "../../core/log.js";
 import {
   bundledDir,
@@ -147,7 +147,15 @@ function installHookRegistrations(targets: SetupTargets): void {
     return;
   }
   const command = `node "${script}"`;
-  const existing = existsSync(targets.hooksFile) ? readJson<HooksFile | null>(targets.hooksFile, null) : null;
+  const read = readJsonFile<HooksFile>(targets.hooksFile);
+  if (read.kind === "invalid") {
+    // Rewriting it would drop whatever another tool registered there. Until 0.1.8 an
+    // unparseable file read as `null` and setup wrote a fresh one holding only goat's hooks.
+    log.warn(`did not register hooks: ${targets.hooksFile} is not valid JSON (${read.reason})`);
+    log.detail("fix or remove that file, then re-run `goat setup`; goat will not overwrite a hooks file it cannot read");
+    return;
+  }
+  const existing = read.kind === "ok" ? read.value : null;
 
   // Codex rejects the whole file if it carries an unknown top-level key, so those cannot
   // be forwarded. Say exactly what was dropped rather than silently rewriting the file.
