@@ -2,7 +2,7 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.6] — 2026-09-15
 
 Two decisions taken after re-auditing the Codex source at v0.155.0-alpha (1,803 commits past the 0.147.0 that was installed here). Both are implemented version-aware, because the Codex that ships them is newer than the one most installs have today.
 
