@@ -2,7 +2,7 @@
 
 All notable changes to codex-goat are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.8] — 2026-09-16
 
 Found by studying [ponytail](https://github.com/DietrichGebert/ponytail)'s hook runtime and install scripts, and [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator)'s sub-agent configuration. Every item was reproduced against the shipped build before it was fixed.
 
