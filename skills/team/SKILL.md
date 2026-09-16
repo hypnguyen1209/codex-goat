@@ -89,13 +89,21 @@ Rules for the spawn:
 - Start each lane fresh. Its message is self-contained, so it does not need this
   conversation: if the tool offers `fork_context`, set it `false`; if it offers
   `fork_turns`, pass `"none"`.
-- Leave `model` unset. Omit `agent_type`: a lane runs the default agent with its brief as
-  its whole task. (`executor` is the only role card written for implementation work; if you
+- Leave `model` unset: a lane is a separate thread seeded from this session, so it runs the
+  same model and effort you are running. If this session is on an expensive deliberation
+  model and the lanes are routine implementation, say so in your report rather than
+  silently spending it — `goat --for team` starts the whole session on the execution model.
+- Omit `agent_type`: a lane runs the default agent with its brief as its whole task. (`executor` is the only role card written for implementation work; if you
   deliberately want it as a lane's developer message, say so in the lanes file.)
 - Never put a `$stage` sigil in a spawn message; a lane is not a stage invocation.
-- Spawn at most what the tool allows open at once (six on the default tool set). A finished
-  lane still holds its slot until you `close_agent` it: record its evidence, close it, then
-  spawn the next batch.
+- Spawn at most what this session allows open at once. Codex states the budget in your own
+  prompt ("There are N available concurrency slots … including you"); keep at most N-1 lanes
+  open. If nothing states a limit, start at six, and if a spawn is refused for capacity,
+  treat that refusal as the limit and keep every later batch at that size.
+- If the tool set offers `close_agent`, a finished lane keeps its slot until you close it:
+  record its evidence, close it, then spawn the next batch. If there is no `close_agent` in
+  the tool set, a finished lane is reclaimed for you — record its evidence and keep going.
+  Do not wait for a slot that has already been freed.
 - `wait_agent` with several ids returns as soon as the first one finishes. Call it again
   with the lanes still outstanding until every lane has reported. A blocked lane does not
   stop the others.

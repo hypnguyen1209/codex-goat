@@ -448,7 +448,7 @@ flowchart LR
 
     src -->|tsc| dist["dist/"]
     crates -->|cargo| bin["goat-runtime<br/>5 platforms"]
-    scripts -->|"97 contract checks"| assets
+    scripts -->|"102 contract checks"| assets
     dist --> pkg(["npm: codex-goat"])
     assets --> pkg
     bin --> gh(["GitHub Release assets<br/>5 archives + 5 raw binaries"])
@@ -468,11 +468,13 @@ Codex has grown three runtime features that the stages now lean on where they ex
 
 **Goals in `$ultragoal`.** When the session has `create_goal`, `$ultragoal` registers the objective with it. Codex then keeps the run going across turns on its own, audits completion, and asks the model to mark the goal blocked once the same obstacle has held for three consecutive turns; Codex itself only force-stops after three turns of failed commands or three empty turns. That is a per-turn cousin of goat's three-failures rule, not the same rule. The goal is bound to its thread, so it returns on `codex resume` but a new session never sees it; the `.goat/goals/<slug>.md` file stays the durable record and the ledger stays the proof. The goal is closed with `update_goal` in the same breath as `goat state set`. On by default since 0.133.0.
 
-**Agent roles, opt-in.** `goat roles install [--scope user|project]` writes the nine role cards under `prompts/` as Codex agent roles (`<config>/agents/<role>.toml`: `name`, `description`, `developer_instructions`), which makes each one an `agent_type` a lane or a sub-task can be spawned with. It is opt-in because every installed role adds its name and description to the spawn tool's schema on every turn. `goat roles uninstall` removes exactly the files goat wrote and nothing else; a `reviewer.toml` of your own is never touched. Codex has discovered role files since 0.115.0 (the loader moved into its own crate in 0.150.0), and `goat roles` and `goat doctor` say so when the installed CLI is older. Project-scope roles load only in a project Codex trusts; an untrusted checkout's `.codex` layer is disabled.
+**Agent roles, opt-in.** `goat roles install [--scope user|project]` writes the nine role cards under `prompts/` as Codex agent roles (`<config>/agents/<role>.toml`: `name`, `description`, `developer_instructions`), which makes each one an `agent_type` a lane or a sub-task can be spawned with. It is opt-in, and the cost is a step rather than a slope: with no roles installed Codex drops `agent_type` from the spawn schema entirely, and installing even one brings the property back carrying Codex's own built-in roles (`default`, `explorer`, `worker`) alongside yours, on every turn of every session. `goat roles uninstall` removes exactly the files goat wrote and nothing else; a `reviewer.toml` of your own is never touched. Codex has discovered role files since 0.115.0 (the loader moved into its own crate in 0.150.0), and `goat roles` and `goat doctor` say so when the installed CLI is older. Project-scope roles load only in a project Codex trusts; an untrusted checkout's `.codex` layer is disabled.
 
 ## Model routing: plan on Astra, execute on Luna
 
 A Codex session runs one model, so a stage cannot switch models mid-conversation. What makes per-stage routing work is that `.goat/` is durable: `$plan` writes an artifact, the session ends, and a new session on a different model picks it up through the same entry contract. The split is **across sessions**, not inside one — which is exactly what the entry-contract design was for.
+
+One exception, about threads rather than the conversation: a `$team` lane is a separate Codex thread, and its model and effort are seeded from the session that spawned it. So `$team` from a plain `goat` session puts every lane on whatever Codex's catalog default is, which today is the deliberation model. `goat --for team` starts the whole session on the execution model, which is the simplest way to keep lanes cheap. Codex can also retarget spawns with `agents.default_subagent_model` in `config.toml`, but set `agents.default_subagent_reasoning_effort` alongside it: setting the model alone resets effort to that model's catalog default, which is lower than what `goat` injects. codex-goat never writes those keys for you — they would change every spawn in every session, not just a lane.
 
 ```bash
 goat --for plan                 # deliberation session  -> gpt-6-astra (gpt-5.6-sol below codex 0.153)
@@ -642,8 +644,8 @@ npm run build            # TypeScript -> dist/
 npm run build:native     # optional Rust helper
 npm run build:bun        # optional single-file binary (bun build --compile)
 
-npm test                 # build + 164 unit tests + 97 bundle contract checks
-npm run test:native      # 28 Rust tests
+npm test                 # build + 175 unit tests + 102 bundle contract checks
+npm run test:native      #  Rust tests
 npm run verify           # lint + everything above
 ```
 
@@ -661,7 +663,7 @@ flowchart LR
 
     subgraph check["check"]
         direction TB
-        c1["lint · build<br/>164 unit · 97 contract"]
+        c1["lint · build<br/>175 unit · 102 contract"]
         c2["tag == package.json<br/>== marketplace pin"]
         c3["npm publish --dry-run"]
         c1 --> c2 --> c3

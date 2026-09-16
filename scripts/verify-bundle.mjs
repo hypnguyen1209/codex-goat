@@ -93,6 +93,15 @@ for (const name of skillNames) {
     "lanes must be told not to record evidence; two finishing together lose proof",
   );
   check("team skill degrades without spawn_agent", /If `spawn_agent` is not available/.test(team), "$team must still work serially");
+  // "six open at once" and "close_agent after recording" are multi-agent V1 facts. gpt-6-astra
+  // — Codex's catalog default, so what a plain `goat` session runs — is V2: close_agent is not
+  // registered at all there and the cap is lower, so a skill that states either flatly gives
+  // the model instructions that are false in the commonest session.
+  check(
+    "team skill does not hardcode one multi-agent backend",
+    /available concurrency slots/.test(team) && /If the tool set offers `close_agent`/.test(team),
+    "concurrency and close_agent must be conditional on what the session's tool set actually offers",
+  );
 }
 
 // --- one-command install ----------------------------------------------------------------
@@ -137,33 +146,40 @@ for (const file of promptFiles) {
 }
 
 // --- hooks ------------------------------------------------------------------
+const GOAT_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop"];
 const hooksFile = JSON.parse(readFileSync(join(root, "hooks", "hooks.json"), "utf8"));
 const hookEvents = Object.keys(hooksFile.hooks ?? {});
-for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+for (const event of GOAT_HOOK_EVENTS) {
   check(`hook ${event} registered`, hookEvents.includes(event), "missing from hooks/hooks.json");
 }
 
 // --- shipped hooks declare a bounded timeout ---------------------------------------------
 // Codex defaults an omitted hook timeout to 600 seconds
 // (timeout_sec.unwrap_or(600), codex-rs/hooks/src/engine/discovery.rs), so a hook that hung
-// would hold the user's turn for ten minutes. The shipped plugin file and what `goat setup`
-// writes must agree, which is why both are checked.
-for (const [event, groups] of Object.entries(hooksFile.hooks ?? {})) {
-  for (const hook of groups.flatMap((group) => group.hooks ?? [])) {
-    check(
-      `hook ${event} declares a timeout`,
-      typeof hook.timeout === "number" && hook.timeout > 0 && hook.timeout <= 60,
-      `timeout is ${JSON.stringify(hook.timeout)}; Codex would wait 600s on a hung hook`,
-    );
-  }
+// would hold the user's turn for ten minutes.
+const shippedHooks = Object.entries(hooksFile.hooks ?? {}).flatMap(([event, groups]) =>
+  (groups ?? []).flatMap((group) => (group.hooks ?? []).map((hook) => [event, hook])),
+);
+// An assertion that loops an empty list passes without testing anything. Both guards below
+// enumerate, so the population has to be asserted first or an empty hooks.json would sail
+// through every one of them — the same defect class as the exit-code check that never
+// compared, and the readiness check that could not fail.
+check(
+  "shipped hooks are enumerable",
+  shippedHooks.length === GOAT_HOOK_EVENTS.length,
+  `found ${shippedHooks.length} hook handlers in hooks/hooks.json, expected ${GOAT_HOOK_EVENTS.length}; the timeout and PLUGIN_ROOT guards below only test what they can enumerate`,
+);
+for (const [event, hook] of shippedHooks) {
+  check(
+    `hook ${event} declares a timeout`,
+    typeof hook.timeout === "number" && hook.timeout > 0 && hook.timeout <= 60,
+    `timeout is ${JSON.stringify(hook.timeout)}; Codex would wait 600s on a hung hook`,
+  );
 }
 
 check("hook script exists", existsSync(join(root, "hooks", "goat-hook.mjs")), "hooks/goat-hook.mjs is missing");
 
-const hookCommands = Object.values(hooksFile.hooks ?? {})
-  .flat()
-  .flatMap((group) => group.hooks ?? [])
-  .map((hook) => hook.command);
+const hookCommands = shippedHooks.map(([, hook]) => hook.command);
 // Codex's own placeholder, substituted by its hook engine. Built by concatenation so it
 // cannot be mistaken for — or lint-fixed into — a JavaScript template literal.
 const PLUGIN_ROOT_PLACEHOLDER = `\${${"PLUGIN_ROOT"}}`;
@@ -305,6 +321,16 @@ check(
 if (failures.length > 0) {
   console.error(`bundle contract: ${failures.length} failure(s) of ${checks.length} checks\n`);
   for (const failure of failures) console.error(`  FAIL ${failure}`);
+  process.exit(1);
+}
+// A check that stops running is indistinguishable from a check that passes. Pin the count
+// so deleting or short-circuiting one fails the build rather than shrinking the suite.
+const EXPECTED_CHECKS = 102;
+if (checks.length !== EXPECTED_CHECKS) {
+  console.error(
+    `bundle contract: ran ${checks.length} checks, expected ${EXPECTED_CHECKS}. ` +
+      "Update EXPECTED_CHECKS in scripts/verify-bundle.mjs when you add or remove one.\n",
+  );
   process.exit(1);
 }
 console.log(`bundle contract: ${checks.length} checks passed`);

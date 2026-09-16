@@ -10,6 +10,15 @@ import type { StageId } from "./stages.js";
  * artifact, the session ends, and a new session running a different model picks it up
  * through the same entry contract. The split is across sessions, not within one.
  *
+ * One exception, and it is about threads rather than the conversation: a sub-agent spawned
+ * by `$team` is a separate thread with its own config, seeded from this session's model and
+ * effort (codex-rs/core/src/tools/handlers/multi_agents_common.rs, `build_agent_shared_config`).
+ * So lanes inherit whatever the root is running — `$team` from a plain `goat` session puts
+ * every lane on the catalog default. Codex can retarget them with
+ * `agents.default_subagent_model`, which goat deliberately does not inject: it would change
+ * every spawn in every session, not just a lane, and setting the model key alone also resets
+ * effort to that model's catalog default, silently lowering what the launcher injected.
+ *
  * The defaults below are grounded in how Codex positions its models, and in one latency
  * measurement. Neither is a quality measurement — see the caveat on `DEFAULT_ROUTES`.
  */
